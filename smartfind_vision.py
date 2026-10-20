@@ -11,7 +11,7 @@ import io
 import os
 import re
 
-MODEL_PATH = Path(os.environ.get("SMARTFIND_MODEL_PATH", Path(__file__).parent / "models" / "best.pt"))
+MODEL_PATH = Path(os.environ.get("SMARTFIND_MODEL_PATH", Path(__file__).parent / "models" / "best (1).pt"))
 CONFIDENCE_THRESHOLD = float(os.environ.get("SMARTFIND_DETECTION_CONFIDENCE", "0.40"))
 RECOGNIZER_MODE = "model" if MODEL_PATH.is_file() else "unavailable"
 AI_CATEGORIES = {}
@@ -100,25 +100,44 @@ def normalize_brand(value):
     return _BRAND_LOOKUP.get(key, text)
 
 
+
+
+
 @lru_cache(maxsize=1)
 def _load_model():
     if not MODEL_PATH.is_file():
-        raise FileNotFoundError(f"YOLO model was not found: {MODEL_PATH}")
-    try:
-        from ultralytics import YOLO
-    except ImportError as exc:
-        missing = f"{exc.name}: {exc}" if getattr(exc, "name", None) else str(exc)
-        raise RuntimeError(
-            f"YOLO could not import a required package ({missing}). "
-            "Check the deployment build logs and CPU PyTorch requirements."
-        ) from exc
-    return YOLO(str(MODEL_PATH))
+        raise FileNotFoundError(
+            f"YOLO model was not found: {MODEL_PATH}"
+        )
+
+    import sys
+    import pathlib
+    from unittest.mock import patch
+    from yolov5 import YOLOv5
+
+    # Compatibility for checkpoints saved with newer pathlib internals.
+    sys.modules.setdefault("pathlib._local", pathlib)
+
+    # Interpret Linux paths as Windows paths while loading the checkpoint.
+    with patch.object(pathlib, "PosixPath", pathlib.WindowsPath):
+        model = YOLOv5(str(MODEL_PATH), device="cpu")
+
+    return model
+
+
+
+
+
+
+
+
+
 
 
 def get_model_categories():
     """Return class names embedded in the trained model, or an empty list if unavailable."""
     try:
-        names = _load_model().names
+        names = _load_model().model.names
     except Exception:
         # Metadata should not prevent the app from starting if model loading fails;
         # image analysis reports the actionable error when a photo is submitted.
@@ -144,18 +163,35 @@ def classify_image(image_bytes, filename="uploaded-image"):
         raise ValueError("The uploaded file is not a readable image.") from exc
 
     model = _load_model()
-    results = model.predict(source=image, conf=CONFIDENCE_THRESHOLD, verbose=False)
-    boxes = results[0].boxes
-    if boxes is None or len(boxes) == 0:
-        return _fallback_image_analysis(image, "No supported object detected; analyzed the full photo instead")
 
-    best_i = int(boxes.conf.argmax().item())
+    # Run YOLOv5 detection.
+    results = model.predict(image, size=640)
+    boxes = results.xyxy[0]
+
+    if boxes is None or len(boxes) == 0:
+        return _fallback_image_analysis(
+            image,
+            "No supported object detected; analyzed the full photo instead"
+        )
+
+    # Keep detections above the confidence threshold.
+    boxes = boxes[boxes[:, 4] >= CONFIDENCE_THRESHOLD]
+
+    if len(boxes) == 0:
+        return _fallback_image_analysis(
+            image,
+            "No supported object detected; analyzed the full photo instead"
+        )
+
+    best_i = int(boxes[:, 4].argmax().item())
     box = boxes[best_i]
-    class_id = int(box.cls.item())
-    names = model.names
-    category = str(names[class_id] if isinstance(names, dict) else names[class_id])
-    confidence = float(box.conf.item()) * 100
-    x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+
+    class_id = int(box[5].item())
+    names = model.model.names
+    category = str(names[class_id])
+    confidence = float(box[4].item()) * 100
+
+    x1, y1, x2, y2 = [int(v) for v in box[:4].tolist()]
     x1, x2 = max(0, x1), min(image.width, x2)
     y1, y2 = max(0, y1), min(image.height, y2)
     crop = image.crop((x1, y1, x2, y2))
