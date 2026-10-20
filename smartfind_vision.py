@@ -14,7 +14,7 @@ import pathlib
 import os
 
 MODEL_PATH = Path(os.environ.get("SMARTFIND_MODEL_PATH", Path(__file__).parent / "models" / "best (1).pt"))
-CONFIDENCE_THRESHOLD = float(os.environ.get("SMARTFIND_DETECTION_CONFIDENCE", "0.15"))
+CONFIDENCE_THRESHOLD = float(os.environ.get("SMARTFIND_DETECTION_CONFIDENCE", "0.40"))
 RECOGNIZER_MODE = "model" if MODEL_PATH.is_file() else "unavailable"
 AI_CATEGORIES = {}
 
