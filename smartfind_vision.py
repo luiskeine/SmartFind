@@ -104,7 +104,6 @@ def normalize_brand(value):
 
 
 
-
 @lru_cache(maxsize=1)
 def _load_model():
     if not MODEL_PATH.is_file():
@@ -115,17 +114,21 @@ def _load_model():
     import sys
     import os
     import pathlib
+    import torch
     from unittest.mock import patch
     from yolov5 import YOLOv5
 
     # Compatibility for checkpoints saved with newer pathlib internals.
     sys.modules.setdefault("pathlib._local", pathlib)
 
+    # Allow YOLOv5 to load our trusted, locally trained checkpoint.
+    # This must be set before YOLOv5 calls torch.load().
+    os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
+
     if os.name == "nt":
-        # Windows: keep the original loading behavior.
         model = YOLOv5(str(MODEL_PATH), device="cpu")
     else:
-        # Linux (Streamlit Cloud): interpret saved Windows paths as Linux paths.
+        # Streamlit Cloud runs Linux; the checkpoint was saved on Windows.
         with patch.object(pathlib, "WindowsPath", pathlib.PosixPath):
             model = YOLOv5(str(MODEL_PATH), device="cpu")
 
