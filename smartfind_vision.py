@@ -10,6 +10,8 @@ from difflib import SequenceMatcher
 import io
 import os
 import re
+import pathlib
+import os
 
 MODEL_PATH = Path(os.environ.get("SMARTFIND_MODEL_PATH", Path(__file__).parent / "models" / "best (1).pt"))
 CONFIDENCE_THRESHOLD = float(os.environ.get("SMARTFIND_DETECTION_CONFIDENCE", "0.40"))
@@ -111,6 +113,7 @@ def _load_model():
         )
 
     import sys
+    import os
     import pathlib
     from unittest.mock import patch
     from yolov5 import YOLOv5
@@ -118,9 +121,13 @@ def _load_model():
     # Compatibility for checkpoints saved with newer pathlib internals.
     sys.modules.setdefault("pathlib._local", pathlib)
 
-    # Interpret Linux paths as Windows paths while loading the checkpoint.
-    with patch.object(pathlib, "PosixPath", pathlib.WindowsPath):
+    if os.name == "nt":
+        # Windows: keep the original loading behavior.
         model = YOLOv5(str(MODEL_PATH), device="cpu")
+    else:
+        # Linux (Streamlit Cloud): interpret saved Windows paths as Linux paths.
+        with patch.object(pathlib, "WindowsPath", pathlib.PosixPath):
+            model = YOLOv5(str(MODEL_PATH), device="cpu")
 
     return model
 
