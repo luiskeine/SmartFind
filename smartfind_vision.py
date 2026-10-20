@@ -14,7 +14,7 @@ import pathlib
 import os
 
 MODEL_PATH = Path(os.environ.get("SMARTFIND_MODEL_PATH", Path(__file__).parent / "models" / "best (1).pt"))
-CONFIDENCE_THRESHOLD = float(os.environ.get("SMARTFIND_DETECTION_CONFIDENCE", "0.40"))
+CONFIDENCE_THRESHOLD = float(os.environ.get("SMARTFIND_DETECTION_CONFIDENCE", "0.15"))
 RECOGNIZER_MODE = "model" if MODEL_PATH.is_file() else "unavailable"
 AI_CATEGORIES = {}
 
@@ -126,9 +126,11 @@ def _load_model():
     os.environ["TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD"] = "1"
 
     if os.name == "nt":
-        model = YOLOv5(str(MODEL_PATH), device="cpu")
+        # Windows: handle Linux paths saved inside the checkpoint.
+        with patch.object(pathlib, "PosixPath", pathlib.WindowsPath):
+            model = YOLOv5(str(MODEL_PATH), device="cpu")
     else:
-        # Streamlit Cloud runs Linux; the checkpoint was saved on Windows.
+        # Linux (Streamlit Cloud): handle Windows paths saved inside the checkpoint.
         with patch.object(pathlib, "WindowsPath", pathlib.PosixPath):
             model = YOLOv5(str(MODEL_PATH), device="cpu")
 
