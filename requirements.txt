@@ -9,3 +9,4 @@ pytesseract>=0.3.13
 rapidocr-onnxruntime>=1.4,<2
 psycopg[binary]>=3.2,<4
 setuptools>=70
+setuptools==80.9.0
