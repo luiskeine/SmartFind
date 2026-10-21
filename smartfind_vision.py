@@ -29,29 +29,21 @@ _COLOR_PROTOTYPES = {
 # brands for the 22 trained classes, not a promise that every product in the class
 # uses one of these brands. Logo-only marks are outside OCR's capabilities.
 BRANDS_BY_CATEGORY = {
-    "Apple-Pencil": ["Apple", "Logitech", "Adonit", "Wacom", "ESR"],
-    "Bag": ["JanSport", "Herschel", "Nike", "Adidas", "Fjallraven"],
     "Calculator": ["Casio", "Canon", "Texas Instruments", "Sharp", "Citizen"],
     "Charging-cable": ["Anker", "Apple", "Samsung", "UGREEN", "Baseus"],
     "Earphones": ["Apple", "Sony", "JBL", "Samsung", "Xiaomi"],
     "Glasses": ["Ray-Ban", "Oakley", "Gucci", "Sunnies Studios", "Gentle Monster"],
-    "Keyboard": ["Logitech", "Razer", "Corsair", "Keychron", "Redragon"],
     "Keys": ["Yale", "Schlage", "Kwikset", "Master Lock", "ABUS"],
     "Laptop": ["Apple", "Dell", "HP", "Lenovo", "ASUS"],
     "Lecture-notes": ["Moleskine", "MUJI", "Kokuyo", "Campus", "Stabilo"],
     "Markers": ["Sharpie", "EXPO", "Crayola", "Pilot", "Zebra"],
     "Mobile phone": ["Samsung", "Apple", "Xiaomi", "Huawei", "OPPO"],
     "Mouse": ["Logitech", "Razer", "Corsair", "Microsoft", "HP"],
-    "PC": ["HP", "Dell", "Lenovo", "ASUS", "Acer"],
     "Pen": ["Pilot", "Parker", "Uni-ball", "Zebra", "BIC"],
-    "Screen": ["Samsung", "LG", "Dell", "ASUS", "Acer"],
     # ID cards and plain keys often have no readable consumer brand.
     "StudentID_card": [],
     "Wallet": ["Coach", "Fossil", "Herschel", "Secrid", "Louis Vuitton"],
     "Watch": ["Apple", "Casio", "Seiko", "Rolex", "Garmin"],
-    "Water bottle": ["Hydro Flask", "Stanley", "Aquaflask", "Thermos", "Klean Kanteen"],
-    "iPad-Air": ["Apple", "Logitech", "ESR", "ZAGG", "OtterBox"],
-    "iPad-Pro": ["Apple", "Logitech", "ESR", "ZAGG", "OtterBox"],
 }
 ALL_KNOWN_BRANDS = list(dict.fromkeys(
     brand for brands in BRANDS_BY_CATEGORY.values() for brand in brands))
