@@ -97,6 +97,7 @@ CONTRAST_PAIRS = (
     ("muted", "surface"),
     ("placeholder", "surface"),
     ("accent", "surface"),
+    ("accent", "elevated"),
     ("muted", "elevated"),
     ("primary-bg", "surface"),
     ("primary-bg", "elevated"),
@@ -209,12 +210,28 @@ def theme_stylesheet(theme, active_nav_index=None):
     .stApp [data-testid="stTextInputRootElement"] button svg {{
       color:var(--sf-muted) !important; fill:var(--sf-muted) !important;
     }}
-    .stApp [data-baseweb="popover"] [role="listbox"],
-    .stApp [data-baseweb="popover"] [role="option"] {{
+    [data-testid="stSelectboxVirtualDropdown"],
+    [data-testid="stSelectboxVirtualDropdown"] [role="listbox"],
+    [data-testid="stSelectboxVirtualDropdown"] [role="option"],
+    [data-baseweb="popover"],
+    [data-baseweb="popover"] [role="listbox"],
+    [data-baseweb="popover"] [role="option"] {{
       background:var(--sf-surface) !important; color:var(--sf-text) !important;
     }}
-    .stApp [data-baseweb="popover"] [role="option"]:hover {{
+    [data-testid="stSelectboxVirtualDropdown"] [role="listbox"] *,
+    [data-testid="stSelectboxVirtualDropdown"] [role="option"] *,
+    [data-baseweb="popover"] [role="listbox"] *,
+    [data-baseweb="popover"] [role="option"] * {{
+      color:var(--sf-text) !important;
+    }}
+    [data-testid="stSelectboxVirtualDropdown"] [role="option"]:hover,
+    [data-testid="stSelectboxVirtualDropdown"] [role="option"][aria-selected="true"],
+    [data-testid="stSelectboxVirtualDropdown"] [role="option"][data-focused],
+    [data-baseweb="popover"] [role="option"]:hover,
+    [data-baseweb="popover"] [role="option"][aria-selected="true],
+    [data-baseweb="popover"] [role="option"][data-focused] {{
       background:var(--sf-elevated) !important;
+      color:var(--sf-text) !important;
     }}
     .stApp [data-testid="stTextInputRootElement"]:focus-within,
     .stApp [data-testid="stTextAreaRootElement"]:focus-within,
@@ -416,25 +433,6 @@ def theme_stylesheet(theme, active_nav_index=None):
     .stApp .hero-title span {{ color:var(--sf-hero-accent) !important; }}
     .stApp .hero-desc {{ color:var(--sf-hero-muted) !important; }}
 
-    .stApp [data-testid="stMarkdownContainer"] [style*="color:#0d2847"],
-    .stApp [data-testid="stMarkdownContainer"] [style*="color: #0d2847"],
-    .stApp [data-testid="stMarkdownContainer"] [style*="color:#1a202c"],
-    .stApp [data-testid="stMarkdownContainer"] [style*="color: #1a202c"],
-    .stApp [data-testid="stMarkdownContainer"] [style*="color:#2d3748"],
-    .stApp [data-testid="stMarkdownContainer"] [style*="color:#4a5568"],
-    .stApp [data-testid="stMarkdownContainer"] [style*="color: #4a5568"] {{
-      color:var(--sf-text) !important;
-    }}
-    .stApp [data-testid="stMarkdownContainer"] [style*="color:#718096"],
-    .stApp [data-testid="stMarkdownContainer"] [style*="color: #718096"],
-    .stApp [data-testid="stMarkdownContainer"] [style*="color:#a0aec0"] {{
-      color:var(--sf-muted) !important;
-    }}
-    .stApp [data-testid="stMarkdownContainer"] [style*="background:#fff"],
-    .stApp [data-testid="stMarkdownContainer"] [style*="background: #fff"],
-    .stApp [data-testid="stMarkdownContainer"] [style*="background:#ffffff"] {{
-      background:var(--sf-surface) !important;
-    }}
     :focus-visible {{ outline:3px solid var(--sf-accent) !important; outline-offset:3px !important; }}
     @media (prefers-reduced-motion: reduce) {{
       *, *::before, *::after {{

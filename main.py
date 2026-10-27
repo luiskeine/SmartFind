@@ -342,7 +342,7 @@ def thumb(r, size=44):
         return (f'<img src="{r["photo"]}" style="width:{size}px;height:{size}px;object-fit:cover;'
                 f'border-radius:8px;flex-shrink:0">')
     icon = CATEGORY_ICONS.get(r["category"], "📦")
-    return (f'<div style="width:{size}px;height:{size}px;border-radius:8px;background:#edf2f7;display:flex;'
+    return (f'<div style="width:{size}px;height:{size}px;border-radius:8px;background:var(--sf-elevated);display:flex;'
             f'align-items:center;justify-content:center;font-size:{int(size * .5)}px;flex-shrink:0">{icon}</div>')
 
 
@@ -713,20 +713,20 @@ section[data-testid="stSidebar"] .stButton > button {{
   color:var(--sf-sidebar-text); font-size:13px; font-weight:600; border-radius:10px; padding:10px 14px; box-shadow:none; }}
 section[data-testid="stSidebar"] .stButton > button > div {{ width:100%; justify-content:flex-start !important; }}
 section[data-testid="stSidebar"] .stButton > button p {{ text-align:left !important; width:100%; }}
-section[data-testid="stSidebar"] .stButton > button:hover {{ background:rgba(255,255,255,.08); color:#fff; }}
+section[data-testid="stSidebar"] .stButton > button:hover {{ background:rgba(255,255,255,.08); color:var(--sf-sidebar-active-text); }}
 .st-key-nav_{active_idx} button {{
   background:var(--sf-sidebar-active-bg) !important; color:var(--sf-sidebar-active-text) !important;
   border:1px solid var(--sf-accent) !important; }}
 .logo-row {{ display:flex; align-items:center; gap:12px; padding:24px 8px 18px; border-bottom:1px solid rgba(255,255,255,.08); }}
-.logo-icon {{ width:44px; height:44px; border-radius:12px; background:#2aa99b; color:#fff; display:flex;
+.logo-icon {{ width:44px; height:44px; border-radius:12px; background:var(--sf-primary-bg); color:var(--sf-primary-text); display:flex;
   align-items:center; justify-content:center; font-weight:800; font-size:18px; }}
 .menu-label {{ color:var(--sf-sidebar-muted); font-size:10px; font-weight:800; letter-spacing:1px; padding:20px 8px 8px; }}
 
 /* Top header */
 .top-header {{ height:60px; background:var(--sf-surface); border-bottom:1px solid var(--sf-border); display:flex;
   align-items:center; justify-content:space-between; padding:0 35px; margin-bottom:24px; }}
-.breadcrumb {{ color:#718096; font-size:13px; }} .breadcrumb strong {{ color:#1a202c; }}
-.user-avatar {{ width:32px; height:32px; border-radius:50%; background:#e2e8f0; color:#2b6cb0;
+.breadcrumb {{ color:var(--sf-muted); font-size:13px; }} .breadcrumb strong {{ color:var(--sf-text); }}
+.user-avatar {{ width:32px; height:32px; border-radius:50%; background:var(--sf-elevated); color:var(--sf-accent);
   display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }}
 
 /* Cards: any container whose key starts with card_ */
@@ -741,10 +741,10 @@ div[class*="st-key-card_"] .stButton > button {{ border-radius:8px; font-weight:
 .st-key-hero_lost button {{ background:var(--sf-primary-bg); color:var(--sf-primary-text); border:none; }}
 .st-key-hero_found button {{ background:transparent; color:var(--sf-hero-text); border:1px solid rgba(255,255,255,.4); }}
 .hero-badge {{ background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); border-radius:20px;
-  padding:4px 12px; font-size:10px; font-weight:700; color:#e2e8f0; display:inline-block; margin-bottom:14px; }}
-.hero-title {{ font-size:40px; font-weight:800; line-height:1.15; color:#fff; margin-bottom:12px; }}
+  padding:4px 12px; font-size:10px; font-weight:700; color:var(--sf-hero-text); display:inline-block; margin-bottom:14px; }}
+.hero-title {{ font-size:40px; font-weight:800; line-height:1.15; color:var(--sf-hero-text); margin-bottom:12px; }}
 .hero-title span {{ color:var(--sf-hero-accent); }}
-.hero-desc {{ color:#cddbe8; font-size:13px; line-height:1.6; margin-bottom:18px; max-width:520px; }}
+.hero-desc {{ color:var(--sf-hero-muted); font-size:13px; line-height:1.6; margin-bottom:18px; max-width:520px; }}
 .how-card {{ background:var(--sf-surface); border-radius:14px; padding:20px; color:var(--sf-text); box-shadow:0 8px 20px rgba(0,0,0,.15); }}
 .step {{ display:flex; gap:12px; margin-top:14px; }}
 .step-num {{ width:24px; height:24px; border-radius:50%; background:var(--sf-elevated); color:var(--sf-accent); font-weight:800;
@@ -755,55 +755,55 @@ div[class*="st-key-card_"] .stButton > button {{ border-radius:8px; font-weight:
 .page-sub {{ color:var(--sf-muted); font-size:13px; margin-bottom:18px; }}
 
 .pill {{ padding:3px 12px; border-radius:12px; font-size:11px; font-weight:700; display:inline-block; }}
-.pill-lost {{ background:var(--sf-status-lost-bg); color:var(--sf-status-lost-text); border:1px solid #fbd38d; }}
-.pill-found {{ background:var(--sf-status-found-bg); color:var(--sf-status-found-text); border:1px solid #9ae6b4; }}
+.pill-lost {{ background:var(--sf-status-lost-bg); color:var(--sf-status-lost-text); border:1px solid var(--sf-status-lost-text); }}
+.pill-found {{ background:var(--sf-status-found-bg); color:var(--sf-status-found-text); border:1px solid var(--sf-status-found-text); }}
 .pill-open {{ background:var(--sf-status-open-bg); color:var(--sf-status-open-text); }}
 .th {{ font-size:10px; font-weight:800; color:var(--sf-muted); letter-spacing:.5px; }}
-.notif-bar {{ background:var(--sf-notification-bg); border:1px solid #bee3f8; border-radius:12px; padding:12px 16px;
+.notif-bar {{ background:var(--sf-notification-bg); border:1px solid var(--sf-border); border-radius:12px; padding:12px 16px;
   margin-bottom:18px; color:var(--sf-notification-text); font-size:12px; line-height:1.5; }}
 
-.warn-bar {{ background:var(--sf-warning-bg); border:1px solid #fbd38d; border-radius:12px; padding:12px 16px;
+.warn-bar {{ background:var(--sf-warning-bg); border:1px solid var(--sf-warning-text); border-radius:12px; padding:12px 16px;
   margin-bottom:18px; color:var(--sf-warning-text); font-size:12px; line-height:1.5; }}
-.sim-tag {{ background:#fefcbf; color:#744210; font-size:9px; font-weight:800; padding:2px 7px;
+.sim-tag {{ background:var(--sf-warning-bg); color:var(--sf-warning-text); font-size:9px; font-weight:800; padding:2px 7px;
   border-radius:6px; letter-spacing:.5px; margin-right:6px; }}
-.lbl {{ display:none; color:#718096; font-size:12px; }}
-.rid {{ font-size:10px; color:#a0aec0; }}
-.stat-icon {{ width:34px; height:34px; border-radius:8px; background:#e6fffa; display:flex;
+.lbl {{ display:none; color:var(--sf-muted); font-size:12px; }}
+.rid {{ font-size:10px; color:var(--sf-muted); }}
+.stat-icon {{ width:34px; height:34px; border-radius:8px; background:var(--sf-elevated); color:var(--sf-accent); display:flex;
   align-items:center; justify-content:center; font-size:16px; flex-shrink:0; }}
 
 /* Records list: table-like on desktop, stacked cards on phones */
 .rec-head, .rec-summary {{ display:grid; grid-template-columns:3fr 1.3fr 1fr 1.8fr 1.3fr 1fr 1fr;
   gap:10px; align-items:center; }}
-.rec-head {{ padding:8px 6px; border-bottom:1px solid #e2e8f0; }}
-details.rec {{ border-bottom:1px solid #edf2f7; }}
+.rec-head {{ padding:8px 6px; border-bottom:1px solid var(--sf-border); }}
+details.rec {{ border-bottom:1px solid var(--sf-border); }}
 details.rec > summary {{ list-style:none; cursor:pointer; padding:12px 6px; font-size:13px; }}
 details.rec > summary::-webkit-details-marker {{ display:none; }}
 .cell-name {{ display:flex; gap:10px; align-items:center; min-width:0; }}
-.rec-more {{ color:#2b6cb0; font-weight:700; font-size:12px; text-align:right; }}
-details.rec[open] .rec-more {{ color:#2a9d8f; }}
+.rec-more {{ color:var(--sf-accent); font-weight:700; font-size:12px; text-align:right; }}
+details.rec[open] .rec-more {{ color:var(--sf-accent); }}
 .rec-detail {{ background:var(--sf-elevated); border-radius:10px; padding:14px; margin:0 6px 12px; display:flex;
   gap:14px; font-size:12px; color:var(--sf-muted); line-height:1.8; }}
 
 /* Match cards */
 .m-top {{ display:flex; gap:16px; align-items:stretch; }}
 .m-link {{ color:var(--sf-muted); font-size:20px; align-self:center; }}
-.m-bottom {{ display:flex; margin-top:16px; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }}
+.m-bottom {{ display:flex; margin-top:16px; border:1px solid var(--sf-border); border-radius:12px; overflow:hidden; }}
 
 /* ---------- PHONE ---------- */
 @media (max-width: 700px) {{
   /* App-owned menu: works even when Streamlit changes its sidebar-toggle DOM. */
   .st-key-mobile_nav {{ display:block !important; position:fixed; top:8px; left:8px; z-index:100002; }}
   .st-key-mobile_nav button {{ min-width:44px; min-height:44px; border-radius:8px;
-    background:#0d2847 !important; color:#fff !important; border:1px solid #2a9d8f !important; }}
-  .st-key-mobile_nav button * {{ color:#fff !important; }}
+    background:var(--sf-sidebar-bg) !important; color:var(--sf-sidebar-active-text) !important; border:1px solid var(--sf-accent) !important; }}
+  .st-key-mobile_nav button * {{ color:var(--sf-sidebar-active-text) !important; }}
   /* Keep Streamlit's collapsed-sidebar control above the app's custom chrome. */
   header[data-testid="stHeader"] {{ height:3.5rem; position:fixed; inset:0 0 auto 0; z-index:100000; pointer-events:none; }}
   header[data-testid="stHeader"] button,
   [data-testid="stSidebarCollapsedControl"] {{ display:flex !important; visibility:visible !important; opacity:1 !important;
     pointer-events:auto; position:fixed; top:8px; left:8px; z-index:100001; min-width:44px; min-height:44px;
-    border-radius:8px; background:#0d2847 !important; color:#fff !important; }}
+    border-radius:8px; background:var(--sf-sidebar-bg) !important; color:var(--sf-sidebar-active-text) !important; }}
   header[data-testid="stHeader"] button svg,
-  [data-testid="stSidebarCollapsedControl"] svg {{ fill:#fff !important; color:#fff !important; }}
+  [data-testid="stSidebarCollapsedControl"] svg {{ fill:var(--sf-sidebar-active-text) !important; color:var(--sf-sidebar-active-text) !important; }}
   .top-header {{ padding:0 14px 0 56px; margin-bottom:16px; }}
   .top-header .user-name {{ display:none; }}
   .st-key-body_pad {{ padding:0 14px !important; }}
@@ -817,7 +817,7 @@ details.rec[open] .rec-more {{ color:#2a9d8f; }}
   .score-panel {{ width:100% !important; box-sizing:border-box; }}
   .lbl {{ display:inline; }}
   .rec-head {{ display:none; }}
-  details.rec {{ border:1px solid #e2e8f0; border-radius:12px; margin-bottom:10px; background:#fff; }}
+  details.rec {{ border:1px solid var(--sf-border); border-radius:12px; margin-bottom:10px; background:var(--sf-surface); }}
   .rec-summary {{ grid-template-columns:1fr 1fr; gap:6px 10px; }}
   .rec-summary > .cell-name {{ grid-column:1 / -1; }}
   .rec-more {{ text-align:left; }}
@@ -825,7 +825,7 @@ details.rec[open] .rec-more {{ color:#2a9d8f; }}
   .stButton > button {{ min-height:44px; }}
   /* Admin rows become cards */
   div[class*="st-key-th_"] {{ display:none; }}
-  div[class*="st-key-row_"] {{ border:1px solid #e2e8f0; border-radius:10px; padding:10px; margin-bottom:10px; background:#fbfcfe; }}
+  div[class*="st-key-row_"] {{ border:1px solid var(--sf-border); border-radius:10px; padding:10px; margin-bottom:10px; background:var(--sf-surface); }}
   div[class*="st-key-row_"] [data-testid="stHorizontalBlock"] {{ flex-wrap:wrap; gap:6px; }}
   div[class*="st-key-row_"] [data-testid="stColumn"], div[class*="st-key-row_"] [data-testid="column"] {{
     min-width:calc(50% - 6px) !important; flex:1 1 calc(50% - 6px) !important; width:auto !important; }}
@@ -906,7 +906,7 @@ def show_details(rid):
     html(f"""{type_pill(r)} <span class="rid" style="font-size:12px;margin-left:8px">{r['id']}</span>
     <div style="display:flex;gap:14px;margin-top:10px">{thumb(r, 88)}
     <div><div style="font-size:18px;font-weight:800">{esc(r['item'])}</div>
-    <div style="font-size:13px;color:#4a5568;line-height:1.9">
+    <div style="font-size:13px;color:var(--sf-muted);line-height:1.9">
     Category: <strong>{esc(r['category'])}</strong><br>Brand: <strong>{esc(r.get('brand', '')) or '—'}</strong><br>
     Color: <strong>{esc(r['color']) or '—'}</strong><br>
     Location: <strong>{esc(r['location'])}</strong><br>Date: <strong>{fmt_date(r['date'])}</strong><br>
@@ -920,8 +920,8 @@ def show_details(rid):
 with st.sidebar:
     html("""
     <div class="logo-row"><div class="logo-icon">SF</div>
-    <div><div style="color:#fff;font-size:18px;font-weight:800;line-height:1.1">SmartFind</div>
-    <div style="color:#8da4be;font-size:11px">Campus Lost & Found</div></div></div>
+    <div><div style="color:var(--sf-sidebar-active-text);font-size:18px;font-weight:800;line-height:1.1">SmartFind</div>
+    <div style="color:var(--sf-sidebar-muted);font-size:11px">Campus Lost & Found</div></div></div>
     <div class="menu-label">MAIN MENU</div>
     """)
     for i, (name, icon) in enumerate(PAGES):
@@ -947,8 +947,8 @@ with st.sidebar:
     html("""
     <div style="margin-top:60px;background:rgba(255,255,255,.05);padding:10px 12px;border-radius:8px;
     border:1px solid rgba(255,255,255,.1)">
-    <div style="color:#2aa99b;font-size:10px;font-weight:800">TIP CS 403 PROJECT</div>
-    <div style="color:#a0aec0;font-size:10px;margin-top:2px">Perceive → Reason → Act</div></div>
+    <div style="color:var(--sf-accent);font-size:10px;font-weight:800">TIP CS 403 PROJECT</div>
+    <div style="color:var(--sf-sidebar-muted);font-size:10px;margin-top:2px">Perceive → Reason → Act</div></div>
     """)
 
 html(f"""
@@ -956,8 +956,8 @@ html(f"""
   <div class="breadcrumb">Campus Lost & Found &nbsp;›&nbsp; <strong>{active}</strong></div>
   <div style="display:flex;align-items:center;gap:10px">
     <div class="user-avatar">{esc(current_user['name'][:1].upper())}</div>
-    <div class="user-name"><div style="color:#2d3748;font-size:12px;font-weight:700">{esc(current_user['name'])}</div>
-    <div style="color:#a0aec0;font-size:10px">{role_label}</div></div>
+    <div class="user-name"><div style="color:var(--sf-text);font-size:12px;font-weight:700">{esc(current_user['name'])}</div>
+    <div style="color:var(--sf-muted);font-size:10px">{role_label}</div></div>
   </div>
 </div>
 """)
@@ -1000,19 +1000,19 @@ with body:
                 html("""
                 <div class="how-card">
                   <div style="display:flex;justify-content:space-between;align-items:center;
-                  border-bottom:1px solid #edf2f7;padding-bottom:10px">
+                  border-bottom:1px solid var(--sf-border);padding-bottom:10px">
                     <div style="font-size:13px;font-weight:800">How SmartFind works</div>
-                    <span style="background:#e6fffa;color:#234e52;font-size:9px;font-weight:800;
+                    <span style="background:var(--sf-notification-bg);color:var(--sf-notification-text);font-size:9px;font-weight:800;
                     padding:2px 8px;border-radius:6px">INTELLIGENT</span></div>
                   <div class="step"><div class="step-num">1</div><div>
                     <div style="font-size:12px;font-weight:700">Perceive</div>
-                    <div style="font-size:11px;color:#718096">YOLO detects a supported item, crops it, and suggests category, pixel color, and readable text for review.</div></div></div>
+                    <div style="font-size:11px;color:var(--sf-muted)">YOLO detects a supported item, crops it, and suggests category, pixel color, and readable text for review.</div></div></div>
                   <div class="step"><div class="step-num">2</div><div>
                     <div style="font-size:12px;font-weight:700">Reason</div>
-                    <div style="font-size:11px;color:#718096">Compares category, color, brand text, location, date and description.</div></div></div>
+                    <div style="font-size:11px;color:var(--sf-muted)">Compares category, color, brand text, location, date and description.</div></div></div>
                   <div class="step"><div class="step-num">3</div><div>
                     <div style="font-size:12px;font-weight:700">Act</div>
-                    <div style="font-size:11px;color:#718096">Notifies you about strong possible matches.</div></div></div>
+                    <div style="font-size:11px;color:var(--sf-muted)">Notifies you about strong possible matches.</div></div></div>
                 </div>
                 """)
 
@@ -1030,19 +1030,20 @@ with body:
             with col, st.container(key=f"card_home_{n_card}"):
                 html(f"""<div style="display:flex;gap:12px;min-height:84px">
                 <div class="stat-icon">{ic}</div><div>
-                <div style="font-size:13px;font-weight:700;color:#1a202c">{title}</div>
-                <div style="font-size:11px;color:#718096;margin-top:2px">{sub}</div></div></div>""")
+                <div style="font-size:13px;font-weight:700;color:var(--sf-text)">{title}</div>
+                <div style="font-size:11px;color:var(--sf-muted);margin-top:2px">{sub}</div></div></div>""")
                 if st.button("Open", key=f"open_{n_card}", **STRETCH):
                     navigate(target)
 
         st.write("")
         chips = "".join(
-            f'<div style="background:#f7fafc;border:1px solid #e2e8f0;padding:10px 16px;border-radius:10px;'
-            f'font-size:12px;font-weight:700">{v["icon"]} {k}</div>' for k, v in AI_CATEGORIES.items())
+            f'<div style="background:var(--sf-elevated);border:1px solid var(--sf-border);color:var(--sf-text);'
+            f'padding:10px 16px;border-radius:10px;font-size:12px;font-weight:700">{v["icon"]} {k}</div>'
+            for k, v in AI_CATEGORIES.items())
         with st.container(key="card_supported"):
             html(f"""<div class="eyebrow">PHOTO RECOGNITION · YOLO</div>
-            <div style="font-size:16px;font-weight:800;color:#1a202c;margin-top:4px">{len(MODEL_CATEGORIES)} supported categories across V1 and V2</div>
-            <div style="color:#718096;font-size:12px;margin:4px 0 14px">Choose your detector in the sidebar. YOLO suggests an item and bounding box. OCR reads visible text (not logos), while color is estimated from crop pixels. Confirm suggestions before saving.</div>
+            <div style="font-size:16px;font-weight:800;color:var(--sf-text);margin-top:4px">{len(MODEL_CATEGORIES)} supported categories across V1 and V2</div>
+            <div style="color:var(--sf-muted);font-size:12px;margin:4px 0 14px">Choose your detector in the sidebar. YOLO suggests an item and bounding box. OCR reads visible text (not logos), while color is estimated from crop pixels. Confirm suggestions before saving.</div>
             <div style="display:flex;gap:12px;flex-wrap:wrap">{chips}</div>""")
 
         st.write("")
@@ -1054,12 +1055,13 @@ with body:
             ("Admin access", "Verified OIDC login with an explicit admin email allowlist", "ok"),
         ]
         items = "".join(
-            f'<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #edf2f7;font-size:12px">'
-            f'<span style="color:{"#2f855a" if s == "ok" else "#dd6b20"};font-weight:800">{"●" if s == "ok" else "◐"}</span>'
-            f'<div><strong>{a}</strong><div style="color:#718096">{b}</div></div></div>' for a, b, s in status_rows)
+            f'<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--sf-border);font-size:12px">'
+            f'<span style="color:{"var(--sf-status-found-text)" if s == "ok" else "var(--sf-warning-text)"};font-weight:800">{"●" if s == "ok" else "◐"}</span>'
+            f'<div><strong>{a}</strong><div style="color:var(--sf-muted)">{b}</div></div></div>'
+            for a, b, s in status_rows)
         with st.container(key="card_status"):
             html(f"""<div class="eyebrow">PROTOTYPE STATUS</div>
-            <div style="font-size:16px;font-weight:800;color:#1a202c;margin:4px 0 8px">What works today</div>{items}""")
+            <div style="font-size:16px;font-weight:800;color:var(--sf-text);margin:4px 0 8px">What works today</div>{items}""")
 
     # ========================================================
     # REPORT LOST / FOUND  (same workflow, different wording)
@@ -1125,7 +1127,7 @@ with body:
             <div>{type_pill(r)}<div class="rid">{r['status']}</div></div>
             <div class="rec-more">View details ▾</div></summary>
             <div class="rec-detail">{thumb(r, 96)}<div>
-            <strong style="font-size:14px;color:#1a202c">{esc(r['item'])}</strong><br>
+            <strong style="font-size:14px;color:var(--sf-text)">{esc(r['item'])}</strong><br>
             Category: <strong>{esc(r['category'])}</strong> · Brand: <strong>{esc(r.get('brand', '')) or '—'}</strong> ·
             Color: <strong>{esc(r['color']) or '—'}</strong><br>
             {'Last seen' if r['type'] == 'Lost' else 'Found'} at <strong>{esc(r['location'])}</strong> on <strong>{fmt_date(r['date'])}</strong><br>
@@ -1161,19 +1163,21 @@ with body:
         notified = {notification["pair_key"] for notification in st.session_state.notifications}
 
         def side(label, color, r):
-            return f"""<div style="flex:1;min-width:0;background:#fff;border:1px solid #e2e8f0;border-top:3px solid {color};
+            return f"""<div style="flex:1;min-width:0;background:var(--sf-surface);border:1px solid var(--sf-border);border-top:3px solid {color};
             border-radius:10px;padding:16px">
             <div style="display:flex;justify-content:space-between"><span style="color:{color};font-size:10px;
             font-weight:800">{label}</span><span class="rid">{r['id']}</span></div>
             <div style="display:flex;gap:12px;margin:8px 0 10px;align-items:center">{thumb(r, 56)}
             <div style="font-size:15px;font-weight:700">{esc(r['item'])}</div></div>
-            <div style="font-size:12px;color:#4a5568;line-height:1.8">Category: <strong>{esc(r['category'])}</strong><br>
+            <div style="font-size:12px;color:var(--sf-muted);line-height:1.8">Category: <strong>{esc(r['category'])}</strong><br>
             Brand: <strong>{esc(r.get('brand', '')) or '—'}</strong><br>
             Color: <strong>{esc(r['color']) or '—'}</strong><br>Location: <strong>{esc(r['location'])}</strong><br>
             Date: <strong>{fmt_date(r['date'])}</strong></div></div>"""
 
-        ICON = {"match": ("✓", "#2f855a"), "partial": ("◐", "#dd6b20"),
-                "differ": ("✗", "#c53030"), "unverified": ("?", "#a0aec0")}
+        ICON = {"match": ("✓", "var(--sf-status-found-text)"),
+                "partial": ("◐", "var(--sf-warning-text)"),
+                "differ": ("✗", "var(--sf-status-lost-text)"),
+                "unverified": ("?", "var(--sf-muted)")}
 
         for s, lo, fo, rows in pairs:
             label = "Strong possible match" if s >= NOTIFY_THRESHOLD else "Weak possible match"
@@ -1181,50 +1185,50 @@ with body:
             for x in rows:
                 ic, col = ICON[x["state"]]
                 checks += (f'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 0;'
-                           f'border-bottom:1px solid #edf2f7;font-size:12px"><span><span style="color:{col};'
+                           f'border-bottom:1px solid var(--sf-border);font-size:12px"><span><span style="color:{col};'
                            f'font-weight:800">{ic}</span>&nbsp; <strong>{x["rule"]}</strong>'
-                           f'<span style="color:#718096">&nbsp;{x["detail"]}</span></span>'
+                           f'<span style="color:var(--sf-muted)">&nbsp;{x["detail"]}</span></span>'
                            f'<span style="color:{col};font-weight:700;white-space:nowrap">{x["result"]}</span></div>')
             notif_line = ""
             if f"{lo['id']}_{fo['id']}" in notified:
-                notif_line = ('<div style="margin-top:10px;font-size:11px;color:#2a4365">'
+                notif_line = ('<div style="margin-top:10px;font-size:11px;color:var(--sf-notification-text)">'
                               'Inbox notification sent to the report owners.</div>')
             with st.container(key=f"card_match_{lo['id']}_{fo['id']}"):
                 html(f"""
                 <div class="m-top">
-                  {side('LOST REPORT', '#2b6cb0', lo)}
+                  {side('LOST REPORT', 'var(--sf-status-lost-text)', lo)}
                   <div class="m-link">⛓</div>
-                  {side('FOUND REPORT', '#2a9d8f', fo)}
+                  {side('FOUND REPORT', 'var(--sf-status-found-text)', fo)}
                 </div>
                 <div class="m-bottom">
-                  <div class="score-panel" style="width:240px;background:linear-gradient(160deg,#0e2a47,#1c525f);padding:24px;color:#fff;text-align:center">
+                  <div class="score-panel" style="width:240px;background:linear-gradient(160deg,var(--sf-hero-bg),var(--sf-hero-bg-end));padding:24px;color:var(--sf-hero-text);text-align:center">
                     <div style="font-size:10px;letter-spacing:1px;opacity:.7">SIMILARITY SCORE</div>
                     <div style="margin:14px auto;width:112px;height:112px;border-radius:50%;
-                    background:conic-gradient(#2aa99b {s * 3.6}deg, rgba(255,255,255,.15) 0);
+                    background:conic-gradient(var(--sf-accent) {s * 3.6}deg, rgba(255,255,255,.15) 0);
                     display:flex;align-items:center;justify-content:center">
-                      <div style="width:90px;height:90px;border-radius:50%;background:#10345a;display:flex;
+                      <div style="width:90px;height:90px;border-radius:50%;background:var(--sf-hero-bg);display:flex;
                       align-items:center;justify-content:center;flex-direction:column;font-weight:800">
                       <span style="font-size:28px;line-height:1">{s}</span>
                       <span style="font-size:11px;opacity:.7;font-weight:600">out of 100</span></div></div>
                     <div style="font-size:15px;font-weight:700">{label}</div>
                     <div style="font-size:10px;opacity:.7;margin-top:4px">Rule-based similarity of report details. Not a probability; not proof of ownership.</div>
                   </div>
-                  <div style="flex:1;padding:18px 22px;background:#fff">
-                    <div style="font-size:11px;font-weight:800;color:#2a9d8f">WHY THIS WAS MATCHED</div>
+                  <div style="flex:1;padding:18px 22px;background:var(--sf-surface);color:var(--sf-text)">
+                    <div style="font-size:11px;font-weight:800;color:var(--sf-accent)">WHY THIS WAS MATCHED</div>
                     <div style="font-size:17px;margin-bottom:6px">Comparison breakdown</div>{checks}
-                    <div style="font-size:10px;color:#a0aec0;margin-top:8px">✓ matches · ◐ partly matches · ✗ differs · ? not provided, so it earns no points</div>
+                    <div style="font-size:10px;color:var(--sf-muted);margin-top:8px">✓ matches · ◐ partly matches · ✗ differs · ? not provided, so it earns no points</div>
                   </div>
                 </div>
-                <div style="margin-top:12px;background:#fffaf0;border:1px solid #fbd38d;color:#9c4221;
+                <div style="margin-top:12px;background:var(--sf-warning-bg);border:1px solid var(--sf-warning-text);color:var(--sf-warning-text);
                 padding:10px 14px;border-radius:8px;font-size:12px">⚠ Possible match only. Ownership must be
                 verified at the campus Lost & Found office.</div>{notif_line}
                 """)
             st.write("")
         if not pairs:
-            html("""<div style="background:#fff;border:1px dashed #cbd5e0;border-radius:14px;padding:32px 20px;text-align:center">
+            html("""<div style="background:var(--sf-surface);border:1px dashed var(--sf-border);border-radius:14px;padding:32px 20px;text-align:center">
             <div style="font-size:30px">🔎</div>
-            <div style="font-size:15px;font-weight:700;color:#1a202c;margin-top:6px">No possible matches yet</div>
-            <div style="font-size:12px;color:#718096;margin-top:4px;line-height:1.6">SmartFind compares every new lost and
+            <div style="font-size:15px;font-weight:700;color:var(--sf-text);margin-top:6px">No possible matches yet</div>
+            <div style="font-size:12px;color:var(--sf-muted);margin-top:4px;line-height:1.6">SmartFind compares every new lost and
             found report against the open reports on the other side.<br>Matches will appear here as soon as one is found.</div></div>""")
 
     elif active == "Notifications":
@@ -1257,7 +1261,7 @@ with body:
                     email_label = "Email queued" if is_configured(mail_config) else "Email not configured"
                 html(f"""<div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
                 <div><strong>Possible match for {esc(notification['item'])}</strong>
-                <div style="font-size:12px;color:#718096;margin-top:4px">Similarity {notification['score']}/100 · {esc(notification['time'])} · {state_label} · {email_label}</div></div>
+                <div style="font-size:12px;color:var(--sf-muted);margin-top:4px">Similarity {notification['score']}/100 · {esc(notification['time'])} · {state_label} · {email_label}</div></div>
                 <span class="pill pill-open">{state_label}</span></div>""")
                 button_cols = st.columns([1, 1, 1, 3])
                 if notification["read_at"] is None and button_cols[0].button(
@@ -1312,10 +1316,10 @@ with body:
                  ("✓", "Resolved Items", sum(r["status"] == "Resolved" for r in reps))]
         for col, (ic, lbl, val) in zip(st.columns(4), stats):
             with col:
-                html(f"""<div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;
+                html(f"""<div style="background:var(--sf-surface);border:1px solid var(--sf-border);border-radius:14px;padding:18px;
                 display:flex;gap:14px;align-items:center;margin-bottom:8px"><div class="stat-icon">{ic}</div>
-                <div><div style="font-size:11px;color:#718096">{lbl}</div>
-                <div style="font-size:26px;font-weight:800;color:#0d2847">{val}</div></div></div>""")
+                <div><div style="font-size:11px;color:var(--sf-muted)">{lbl}</div>
+                <div style="font-size:26px;font-weight:800;color:var(--sf-text)">{val}</div></div></div>""")
         st.write("")
 
         @st.dialog("Update report")
