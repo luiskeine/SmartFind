@@ -288,8 +288,15 @@ def esc(text):
     return _esc(str(text)).replace("\n", " ").replace("$", "&#36;")
 
 
+def request_data_refresh():
+    st.session_state.refresh_data_on_next_run = True
+    st.session_state.manual_data_refresh_requested = True
+    st.rerun()
+
+
 def navigate(page):
     st.session_state.page = page
+    st.session_state.refresh_data_on_next_run = True
     st.rerun()
 
 
@@ -565,27 +572,43 @@ def render_report_wizard(report_type):
 
 
 # ============================================================
-# SESSION STATE  (Supabase is read once per signed-in session, not per navigation)
+# SESSION STATE
 # ============================================================
 
 st.session_state.setdefault("page", "Home")
 st.session_state.setdefault("nonce", 0)          # bumped after a submit to reset the form
 st.session_state.setdefault("vision_model", "v1")
-if not st.session_state.get("reports_loaded", False):
-    st.session_state.reports = load_reports()
-    st.session_state.reports_loaded = True
 st.session_state.setdefault("reports", [])
 st.session_state.setdefault("id_counter", 0)
-for _report in st.session_state.reports:
-    _stored_brand = _report.get("brand", "")
-    _stored_category = _report.get("category", "")
-    _report["brand"] = normalize_brand(_stored_brand)
-    _report["category"] = normalize_category(_stored_category)
-    if _report["brand"] != _stored_brand or _report["category"] != _stored_category:
-        save_report(_report)
-st.session_state.id_counter = max(
-    st.session_state.id_counter,
-    max((int(r["id"].split("-")[-1]) for r in st.session_state.reports), default=0))
+st.session_state.setdefault("notifications", [])
+
+
+def refresh_session_data(owner_email):
+    """Reload reports and the current user's inbox without generating alerts."""
+    reports = load_reports()
+    for report in reports:
+        stored_brand = report.get("brand", "")
+        stored_category = report.get("category", "")
+        report["brand"] = normalize_brand(stored_brand)
+        report["category"] = normalize_category(stored_category)
+        if report["brand"] != stored_brand or report["category"] != stored_category:
+            save_report(report)
+    st.session_state.reports = reports
+    st.session_state.id_counter = max(
+        st.session_state.id_counter,
+        max((int(report["id"].split("-")[-1]) for report in reports), default=0))
+    st.session_state.reports_loaded = True
+    st.session_state.notifications = load_notifications(owner_email)
+    st.session_state.notifications_loaded_for = owner_email
+
+
+refresh_requested = st.session_state.pop("refresh_data_on_next_run", False)
+manual_refresh_requested = st.session_state.pop("manual_data_refresh_requested", False)
+if (refresh_requested or not st.session_state.get("reports_loaded", False)
+        or st.session_state.get("notifications_loaded_for") != current_user["email"]):
+    refresh_session_data(current_user["email"])
+    if manual_refresh_requested:
+        st.session_state.data_refresh_message = True
 
 # ============================================================
 # AGENT 1 — PERCEIVE: see smartfind_vision.py (YOLO detection, crop analysis, optional OCR)
@@ -633,11 +656,6 @@ try:
     mail_config = dict(st.secrets.get("mail", {}))
 except Exception:
     mail_config = {}
-
-if st.session_state.get("notifications_loaded_for") != current_user["email"]:
-    st.session_state.notifications = load_notifications(current_user["email"])
-    st.session_state.notifications_loaded_for = current_user["email"]
-st.session_state.setdefault("notifications", [])
 
 # ============================================================
 # CSS
@@ -869,6 +887,8 @@ with st.container(key="mobile_nav"):
         st.caption("Navigate SmartFind")
         st.toggle("Dark theme", key="mobile_theme_dark",
                   on_change=update_theme_preference, args=("mobile_theme_dark",))
+        if st.button("↻ Refresh data", key="mobile_refresh_data", **STRETCH):
+            request_data_refresh()
         for i, (name, icon) in enumerate(PAGES):
             if st.button(f"{icon}  {name}", key=f"mobile_nav_{i}", **STRETCH):
                 navigate(name)
@@ -909,6 +929,8 @@ with st.sidebar:
         label = f"{icon}   {name} ({unread_count})" if name == "Notifications" and unread_count else f"{icon}   {name}"
         if st.button(label, key=f"nav_{i}", **STRETCH):
             navigate(name)
+    if st.button("↻ Refresh data", key="refresh_data", **STRETCH):
+        request_data_refresh()
     st.toggle("Dark theme", key="theme_dark",
               on_change=update_theme_preference, args=("theme_dark",))
     role_label = "Guest" if current_user["is_guest"] else current_user["role"].title()
@@ -939,6 +961,8 @@ html(f"""
   </div>
 </div>
 """)
+if st.session_state.pop("data_refresh_message", False):
+    st.success("Reports and notifications refreshed.")
 
 body = st.container(key="body_pad")
 

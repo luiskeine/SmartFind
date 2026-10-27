@@ -752,6 +752,33 @@ class MobileNavigationTests(unittest.TestCase):
         self.assertIn(":focus-visible", theme_styles)
 
 
+class DataRefreshTests(unittest.TestCase):
+    def test_tab_navigation_requests_a_refresh_on_the_next_run(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        navigate = source[source.index("def navigate(page):"):source.index("\n\ndef next_id():")]
+        self.assertIn("st.session_state.refresh_data_on_next_run = True", navigate)
+        self.assertIn("st.rerun()", navigate)
+        self.assertIn("refresh_requested or not st.session_state.get(\"reports_loaded\", False)", source)
+
+    def test_refresh_reloads_reports_and_inbox_without_creating_alerts(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        refresh = source[source.index("def refresh_session_data(owner_email):"):
+                         source.index("\n\nrefresh_requested =", source.index("def refresh_session_data(owner_email):"))]
+        self.assertIn("reports = load_reports()", refresh)
+        self.assertIn("load_notifications(owner_email)", refresh)
+        for side_effect in ("auto_monitor_and_notify", "new_notifications",
+                            "save_notifications", "deliver_pending_notification_emails"):
+            self.assertNotIn(side_effect, refresh)
+
+    def test_manual_refresh_is_available_from_desktop_and_mobile_navigation(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        self.assertIn('st.button("↻ Refresh data", key="refresh_data"', source)
+        self.assertIn('st.button("↻ Refresh data", key="mobile_refresh_data"', source)
+        request = source[source.index("def request_data_refresh():"):source.index("\n\ndef navigate(page):")]
+        self.assertIn("refresh_data_on_next_run = True", request)
+        self.assertIn("manual_data_refresh_requested = True", request)
+
+
 class EmailDeliveryTests(unittest.TestCase):
     def test_mail_requires_smtp_credentials(self):
         self.assertFalse(smartfind_mail.is_configured({}))
