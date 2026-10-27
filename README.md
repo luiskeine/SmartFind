@@ -23,7 +23,7 @@ Choose **Continue as guest** to create a persistent guest account. SmartFind gen
 
 Report submission uses a three-step flow: add an optional photo, enter and save private details, then review and explicitly submit. Incomplete drafts are stored in Supabase under the signed-in email or guest account and can be resumed on another device by signing in or using the guest recovery code. A draft is not visible as a report and does not participate in matching until submitted. Each account can keep one draft for each report type; deleting a draft removes it permanently.
 
-Use **Dark theme** in the sidebar to switch appearance. Theme and Records search/filter preferences are saved to the account and restored across devices. The app uses brief interaction transitions and honors the device's reduced-motion preference. The layout adapts to phone, tablet, and desktop sizes; controls are sized for touch use.
+Use **Dark theme** in the sidebar to switch appearance. Both themes explicitly style text, fields, primary/secondary/disabled buttons, navigation, and custom surfaces; declared foreground/background pairs are tested against WCAG AA contrast. Theme and Records search/filter preferences are saved to the account and restored across devices. The app uses brief interaction transitions and honors the device's reduced-motion preference. The layout adapts to phone, tablet, and desktop sizes; controls are sized for touch use.
 
 Create `.streamlit/secrets.toml` for local use. This file is git-ignored; never commit real credentials. Register both the local and deployed callback URLs in the Google OAuth client. In Streamlit Community Cloud, paste the same settings into the app's **Secrets** settings, changing `redirect_uri` to the deployed URL:
 

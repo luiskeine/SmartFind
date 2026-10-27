@@ -659,16 +659,43 @@ class AuthenticationTests(unittest.TestCase):
 
 
 class ThemeTests(unittest.TestCase):
-    def test_theme_text_tokens_meet_wcag_aa_contrast_on_surfaces(self):
-        for tokens in smartfind_theme.THEME_TOKENS.values():
-            for foreground in ("text", "muted", "accent"):
-                with self.subTest(foreground=foreground, surface=tokens["surface"]):
+    def test_all_declared_theme_foreground_background_pairs_meet_wcag_aa(self):
+        for theme, tokens in smartfind_theme.THEME_TOKENS.items():
+            for foreground, background in smartfind_theme.CONTRAST_PAIRS:
+                with self.subTest(theme=theme, foreground=foreground, background=background):
                     self.assertGreaterEqual(
-                        smartfind_theme.contrast_ratio(tokens[foreground], tokens["surface"]), 4.5)
+                        smartfind_theme.contrast_ratio(tokens[foreground], tokens[background]), 4.5)
 
-    def test_theme_variables_are_explicit_and_unknown_theme_falls_back_to_light(self):
-        self.assertIn("--sf-bg:#0b1525", smartfind_theme.theme_variables_css("dark"))
-        self.assertIn("--sf-text:#0d2847", smartfind_theme.theme_variables_css("unknown"))
+    def test_theme_stylesheet_styles_auth_controls_and_nested_button_labels(self):
+        for theme in smartfind_theme.THEME_TOKENS:
+            stylesheet = smartfind_theme.theme_stylesheet(theme)
+            with self.subTest(theme=theme):
+                self.assertIn("--sf-primary-bg:", stylesheet)
+                self.assertIn("--sf-primary-text:", stylesheet)
+                self.assertIn('button[data-testid^="stBaseButton-primary"] *', stylesheet)
+                self.assertIn('button[kind="primary"] *', stylesheet)
+                self.assertIn(':not([kind="primary"]) *', stylesheet)
+                self.assertIn('[data-testid="stTextInputRootElement"] button svg', stylesheet)
+
+    def test_theme_stylesheet_covers_dark_surfaces_and_selected_sidebar_text(self):
+        stylesheet = smartfind_theme.theme_stylesheet("dark", active_nav_index=0)
+        self.assertIn("background:var(--sf-surface) !important", stylesheet)
+        self.assertIn(".st-key-nav_0 button *", stylesheet)
+        self.assertIn("color:var(--sf-sidebar-active-text) !important", stylesheet)
+        self.assertIn("color:var(--sf-alert-text) !important", stylesheet)
+
+    def test_theme_stylesheet_defaults_unknown_theme_to_light(self):
+        self.assertIn("color-scheme:light", smartfind_theme.theme_stylesheet("unknown"))
+
+    def test_theme_stylesheet_is_injected_before_auth_and_after_app_styles(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        style_calls = [index for index in range(len(source))
+                       if source.startswith("st.markdown(theme_stylesheet(", index)]
+        self.assertEqual(len(style_calls), 2)
+        self.assertLess(style_calls[0], source.index("def _current_user"))
+        self.assertGreater(style_calls[1], source.index("active_idx ="))
+        self.assertNotIn("light_css", source)
+        self.assertNotIn("theme_css =", source)
 
 
 class MobileNavigationTests(unittest.TestCase):
@@ -706,11 +733,12 @@ class MobileNavigationTests(unittest.TestCase):
 
     def test_theme_motion_and_responsive_styles_are_explicit(self):
         source = Path("main.py").read_text(encoding="utf-8")
+        theme_styles = smartfind_theme.theme_stylesheet("dark")
         self.assertIn('st.toggle("Dark theme"', source)
-        self.assertIn("@media (prefers-reduced-motion: reduce)", source)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", theme_styles)
         self.assertIn("@media (max-width: 900px)", source)
         self.assertIn("@media (max-width: 700px)", source)
-        self.assertIn(":focus-visible", source)
+        self.assertIn(":focus-visible", theme_styles)
 
 
 class EmailDeliveryTests(unittest.TestCase):

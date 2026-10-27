@@ -39,41 +39,13 @@ from smartfind_store import (delete_report, load_notifications, load_reports,
                              retry_notification_email, save_notifications, save_report,
                              )
 from smartfind_mail import SMTPDeliveryError, is_configured, send_match_email, test_smtp_connection
-from smartfind_theme import theme_variables_css
+from smartfind_theme import theme_stylesheet
 
 st.set_page_config(page_title="SmartFind - Campus Lost & Found", page_icon="🔎",
                    layout="wide", initial_sidebar_state="auto")
 
 st.session_state.setdefault("ui_theme", "light")
-st.markdown(f"""
-<style>
-{theme_variables_css(st.session_state.ui_theme)}
-.stApp {{ background:var(--sf-bg); color:var(--sf-text); }}
-[data-testid="stWidgetLabel"], [data-testid="stWidgetLabel"] p,
-[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p,
-[data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p {{ color:var(--sf-text) !important; }}
-[data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"],
-[data-testid="stDateInput"] [role="group"], [data-testid="stSelectbox"] [role="group"] {{
-  background:var(--sf-surface) !important; border:1px solid var(--sf-border) !important;
-  border-radius:10px !important;
-}}
-[data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea,
-[data-testid="stDateInput"] input, [data-testid="stSelectbox"] [role="group"] * {{
-  color:var(--sf-text) !important; background:transparent !important; caret-color:var(--sf-accent) !important;
-}}
-[data-testid="stTextInput"] input::placeholder, [data-testid="stTextArea"] textarea::placeholder {{
-  color:var(--sf-muted) !important; opacity:1 !important;
-}}
-.stButton > button, [data-testid="stFormSubmitButton"] button {{
-  min-height:44px; border-radius:10px; transition:transform .18s ease, box-shadow .18s ease, background-color .18s ease;
-}}
-:focus-visible {{ outline:3px solid var(--sf-accent) !important; outline-offset:2px !important; }}
-@media (prefers-reduced-motion: reduce) {{
-  *, *::before, *::after {{ animation-duration:.01ms !important; animation-iteration-count:1 !important;
-    scroll-behavior:auto !important; transition-duration:.01ms !important; }}
-}}
-</style>
-""", unsafe_allow_html=True)
+st.markdown(theme_stylesheet(st.session_state.ui_theme), unsafe_allow_html=True)
 
 # ------------------------------------------------------------
 # Compatibility check: tests the APIs this app actually uses.
@@ -674,61 +646,18 @@ st.session_state.setdefault("notifications", [])
 active = st.session_state.page
 active_idx = [p for p, _ in PAGES].index(active)
 
-# ------------------------------------------------------------
-# TEXT CONTRAST
-# Cause of the "white text on white card" bug: the app paints its own light surfaces
-# (white cards, light page background) but never set a text color. Streamlit's default
-# text color follows the user's OS/browser theme, which is WHITE in dark mode. So every
-# label/heading/caption/radio option that Streamlit draws itself became white-on-white.
-# Fix: force dark text ONLY on elements that sit directly on the surfaces we paint white.
-# Inputs, dropdown menus and other themed widgets keep their own (self-consistent) colors,
-# and our own HTML keeps its inline colors (descendants with their own color are unaffected).
-# ------------------------------------------------------------
-NAVY, SLATE = "#0d2847", "#4a5568"
-LIGHT_SURFACES = ['div[class*="st-key-card_"]',                   # all white cards
-                  '[data-testid="stDialog"] div[role="dialog"]',  # dialogs (forced white below)
-                  '[data-testid="stExpander"]']                   # expanders (forced white below)
-
-
-def _on_light(suffixes, rules):
-    sel = ", ".join(f"{surface} {suffix}".strip() for surface in LIGHT_SURFACES for suffix in suffixes)
-    return f"{sel} {{ {rules} }}\n"
-
-
-_MD = '[data-testid="stMarkdownContainer"]'
-_BTN = ['[data-testid^="stBaseButton-secondary"]', '.stButton > button']
-light_css = "".join([
-    # headings, paragraphs, list items rendered by st.markdown / st.write / st.info etc.
-    _on_light([_MD] + [f"{_MD} {t}" for t in ("p", "li", "h1", "h2", "h3", "h4", "h5", "h6")],
-              f"color:{NAVY} !important;"),
-    # form labels (text_input, selectbox, date_input, text_area, radio titles...)
-    _on_light(['[data-testid="stWidgetLabel"]', '[data-testid="stWidgetLabel"] p',
-               '[data-testid="stWidgetLabel"] label'], f"color:{NAVY} !important; font-weight:600;"),
-    # radio option labels
-    _on_light(['[data-testid="stRadio"] label', '[data-testid="stRadio"] label p'],
-              f"color:{NAVY} !important;"),
-    # st.caption descriptions
-    _on_light(['[data-testid="stCaptionContainer"]', '[data-testid="stCaptionContainer"] p'],
-              f"color:{SLATE} !important;"),
-    # normal buttons: white with navy text (primary buttons keep the theme's primary color)
-    _on_light(_BTN, f"background:#fff !important; color:{NAVY} !important; border:1px solid #cbd5e0 !important;"),
-    _on_light([f"{b} p" for b in _BTN], f"color:{NAVY} !important;"),
-    _on_light([f"{b}:hover" for b in _BTN], "border-color:#2aa99b !important;"),
-    _on_light([f"{b}:disabled" for b in _BTN], "color:#a0aec0 !important; background:#f7fafc !important;"),
-])
-
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
-.stApp {{ background:#f4f7fb; }}
+.stApp {{ background:var(--sf-bg); }}
 
 /* Streamlit's current React-Aria roots inherit the OS theme unless styled directly. */
 [data-testid="stTextInputRootElement"],
 [data-testid="stTextAreaRootElement"],
 [data-testid="stDateInput"] [role="group"],
 [data-testid="stSelectbox"] [role="group"] {{
-    background:#fff !important; border:1px solid #cbd5e0 !important; border-radius:8px !important;
+    background:var(--sf-surface) !important; border:1px solid var(--sf-border) !important; border-radius:8px !important;
     box-shadow:none !important;
 }}
 [data-testid="stTextInput"] input,
@@ -736,21 +665,21 @@ html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
 [data-testid="stDateInput"] input,
 [data-testid="stDateInput"] [role="spinbutton"],
 [data-testid="stSelectbox"] [role="group"] * {{
-    background-color:transparent !important; color:#0d2847 !important; caret-color:#2a9d8f !important;
+    background-color:transparent !important; color:var(--sf-text) !important; caret-color:var(--sf-accent) !important;
 }}
 [data-testid="stTextInput"] input::placeholder,
 [data-testid="stTextArea"] textarea::placeholder,
-[data-testid="stDateInput"] input::placeholder {{ color:#718096 !important; opacity:1 !important; }}
+[data-testid="stDateInput"] input::placeholder {{ color:var(--sf-placeholder) !important; opacity:1 !important; }}
 [data-testid="stTextInputRootElement"]:focus-within,
 [data-testid="stTextAreaRootElement"]:focus-within,
 [data-testid="stDateInput"] [role="group"]:focus-within,
 [data-testid="stSelectbox"] [role="group"]:focus-within {{
-    border-color:#2a9d8f !important; box-shadow:0 0 0 1px #2a9d8f !important;
+    border-color:var(--sf-accent) !important; box-shadow:0 0 0 1px var(--sf-accent) !important;
 }}
 [data-baseweb="popover"] [role="listbox"], [data-baseweb="popover"] [role="option"] {{
-    background:#fff !important; color:#0d2847 !important;
+    background:var(--sf-surface) !important; color:var(--sf-text) !important;
 }}
-[data-baseweb="popover"] [role="option"]:hover {{ background:#e6fffa !important; }}
+[data-baseweb="popover"] [role="option"]:hover {{ background:var(--sf-elevated) !important; }}
 
 /* Hide Streamlit chrome but keep the sidebar toggle */
 #MainMenu, footer, [data-testid="stDecoration"], [data-testid="stToolbar"] {{ display:none !important; }}
@@ -759,75 +688,64 @@ header[data-testid="stHeader"] {{ background:transparent; height:0; }}
 .st-key-body_pad {{ padding:0 35px; }}
 
 /* Sidebar */
-section[data-testid="stSidebar"], section[data-testid="stSidebar"] > div {{ background:#0d2847 !important; }}
+section[data-testid="stSidebar"], section[data-testid="stSidebar"] > div {{ background:var(--sf-sidebar-bg) !important; }}
 section[data-testid="stSidebar"] {{ min-width:260px !important; max-width:260px !important; }}
 section[data-testid="stSidebar"] .stButton > button {{
   width:100%; justify-content:flex-start; border:1px solid transparent; background:transparent;
-  color:#d1e2f2; font-size:13px; font-weight:600; border-radius:10px; padding:10px 14px; box-shadow:none; }}
+  color:var(--sf-sidebar-text); font-size:13px; font-weight:600; border-radius:10px; padding:10px 14px; box-shadow:none; }}
 section[data-testid="stSidebar"] .stButton > button > div {{ width:100%; justify-content:flex-start !important; }}
 section[data-testid="stSidebar"] .stButton > button p {{ text-align:left !important; width:100%; }}
 section[data-testid="stSidebar"] .stButton > button:hover {{ background:rgba(255,255,255,.08); color:#fff; }}
 .st-key-nav_{active_idx} button {{
-  background:rgba(42,169,155,.18) !important; color:#fff !important; border:1px solid #2aa99b !important; }}
+  background:var(--sf-sidebar-active-bg) !important; color:var(--sf-sidebar-active-text) !important;
+  border:1px solid var(--sf-accent) !important; }}
 .logo-row {{ display:flex; align-items:center; gap:12px; padding:24px 8px 18px; border-bottom:1px solid rgba(255,255,255,.08); }}
 .logo-icon {{ width:44px; height:44px; border-radius:12px; background:#2aa99b; color:#fff; display:flex;
   align-items:center; justify-content:center; font-weight:800; font-size:18px; }}
-.menu-label {{ color:#6482a0; font-size:10px; font-weight:800; letter-spacing:1px; padding:20px 8px 8px; }}
+.menu-label {{ color:var(--sf-sidebar-muted); font-size:10px; font-weight:800; letter-spacing:1px; padding:20px 8px 8px; }}
 
 /* Top header */
-.top-header {{ height:60px; background:#fff; border-bottom:1px solid #e2e8f0; display:flex;
+.top-header {{ height:60px; background:var(--sf-surface); border-bottom:1px solid var(--sf-border); display:flex;
   align-items:center; justify-content:space-between; padding:0 35px; margin-bottom:24px; }}
 .breadcrumb {{ color:#718096; font-size:13px; }} .breadcrumb strong {{ color:#1a202c; }}
 .user-avatar {{ width:32px; height:32px; border-radius:50%; background:#e2e8f0; color:#2b6cb0;
   display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; }}
 
 /* Cards: any container whose key starts with card_ */
-div[class*="st-key-card_"] {{ background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:22px; }}
+div[class*="st-key-card_"] {{ background:var(--sf-surface); border:1px solid var(--sf-border); border-radius:14px; padding:22px; }}
 div[class*="st-key-card_"] .stButton > button {{ border-radius:8px; font-weight:600; font-size:12px; }}
 
 /* Hero */
-.st-key-hero {{ background:linear-gradient(110deg,#0e2a47 0%,#15395f 55%,#1c525f 100%); border-radius:18px;
+.st-key-hero {{ background:linear-gradient(110deg,var(--sf-hero-bg) 0%,var(--sf-hero-bg-mid) 55%,
+  var(--sf-hero-bg-end) 100%); border-radius:18px;
   padding:36px 40px; box-shadow:0 10px 25px rgba(13,40,71,.12); }}
 .st-key-hero .stButton > button {{ border-radius:8px; font-weight:700; font-size:13px; }}
-.st-key-hero_lost button {{ background:#2aa99b; color:#fff; border:none; }}
-.st-key-hero_found button {{ background:transparent; color:#fff; border:1px solid rgba(255,255,255,.4); }}
+.st-key-hero_lost button {{ background:var(--sf-primary-bg); color:var(--sf-primary-text); border:none; }}
+.st-key-hero_found button {{ background:transparent; color:var(--sf-hero-text); border:1px solid rgba(255,255,255,.4); }}
 .hero-badge {{ background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.2); border-radius:20px;
   padding:4px 12px; font-size:10px; font-weight:700; color:#e2e8f0; display:inline-block; margin-bottom:14px; }}
 .hero-title {{ font-size:40px; font-weight:800; line-height:1.15; color:#fff; margin-bottom:12px; }}
-.hero-title span {{ color:#2aa99b; }}
+.hero-title span {{ color:var(--sf-hero-accent); }}
 .hero-desc {{ color:#cddbe8; font-size:13px; line-height:1.6; margin-bottom:18px; max-width:520px; }}
-.how-card {{ background:#fff; border-radius:14px; padding:20px; color:#1a202c; box-shadow:0 8px 20px rgba(0,0,0,.15); }}
+.how-card {{ background:var(--sf-surface); border-radius:14px; padding:20px; color:var(--sf-text); box-shadow:0 8px 20px rgba(0,0,0,.15); }}
 .step {{ display:flex; gap:12px; margin-top:14px; }}
-.step-num {{ width:24px; height:24px; border-radius:50%; background:#ebf8ff; color:#2b6cb0; font-weight:800;
+.step-num {{ width:24px; height:24px; border-radius:50%; background:var(--sf-elevated); color:var(--sf-accent); font-weight:800;
   font-size:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }}
 
-.eyebrow {{ color:#2a9d8f; font-size:11px; font-weight:800; letter-spacing:1px; }}
-.page-title {{ font-size:30px; font-weight:500; color:#0d2847; margin:2px 0 4px; }}
-.page-sub {{ color:#718096; font-size:13px; margin-bottom:18px; }}
+.eyebrow {{ color:var(--sf-accent); font-size:11px; font-weight:800; letter-spacing:1px; }}
+.page-title {{ font-size:30px; font-weight:500; color:var(--sf-text); margin:2px 0 4px; }}
+.page-sub {{ color:var(--sf-muted); font-size:13px; margin-bottom:18px; }}
 
 .pill {{ padding:3px 12px; border-radius:12px; font-size:11px; font-weight:700; display:inline-block; }}
-.pill-lost {{ background:#fffaf0; color:#dd6b20; border:1px solid #fbd38d; }}
-.pill-found {{ background:#f0fff4; color:#2f855a; border:1px solid #9ae6b4; }}
-.pill-open {{ background:#edf2f7; color:#4a5568; }}
-.th {{ font-size:10px; font-weight:800; color:#718096; letter-spacing:.5px; }}
-.notif-bar {{ background:#ebf8ff; border:1px solid #bee3f8; border-radius:12px; padding:12px 16px;
-  margin-bottom:18px; color:#2a4365; font-size:12px; line-height:1.5; }}
-{light_css}
-/* Dialogs and expanders are themed dark in dark mode; make them white to match the cards */
-[data-testid="stDialog"] div[role="dialog"] {{ background:#fff !important; }}
-[data-testid="stDialog"] div[role="dialog"] h1, [data-testid="stDialog"] div[role="dialog"] h2,
-[data-testid="stDialog"] div[role="dialog"] h3 {{ color:{NAVY} !important; }}
-[data-testid="stDialog"] button[aria-label="Close"] {{ color:{SLATE} !important; }}
-[data-testid="stExpander"] {{ background:#fff; border:1px solid #e2e8f0 !important; border-radius:12px; }}
-[data-testid="stExpander"] summary, [data-testid="stExpander"] summary p,
-[data-testid="stExpander"] summary span {{ color:{NAVY} !important; }}
-[data-testid="stExpander"] summary svg {{ fill:{NAVY} !important; color:{NAVY} !important; }}
-/* Alerts (st.success / info / warning / error) sit on the light page: dark text on their tinted fill */
-[data-testid="stAlert"] [data-testid="stMarkdownContainer"] p,
-[data-testid="stAlert"] [data-testid="stMarkdownContainer"] li {{ color:#1a202c !important; }}
+.pill-lost {{ background:var(--sf-status-lost-bg); color:var(--sf-status-lost-text); border:1px solid #fbd38d; }}
+.pill-found {{ background:var(--sf-status-found-bg); color:var(--sf-status-found-text); border:1px solid #9ae6b4; }}
+.pill-open {{ background:var(--sf-status-open-bg); color:var(--sf-status-open-text); }}
+.th {{ font-size:10px; font-weight:800; color:var(--sf-muted); letter-spacing:.5px; }}
+.notif-bar {{ background:var(--sf-notification-bg); border:1px solid #bee3f8; border-radius:12px; padding:12px 16px;
+  margin-bottom:18px; color:var(--sf-notification-text); font-size:12px; line-height:1.5; }}
 
-.warn-bar {{ background:#fffaf0; border:1px solid #fbd38d; border-radius:12px; padding:12px 16px;
-  margin-bottom:18px; color:#7b341e; font-size:12px; line-height:1.5; }}
+.warn-bar {{ background:var(--sf-warning-bg); border:1px solid #fbd38d; border-radius:12px; padding:12px 16px;
+  margin-bottom:18px; color:var(--sf-warning-text); font-size:12px; line-height:1.5; }}
 .sim-tag {{ background:#fefcbf; color:#744210; font-size:9px; font-weight:800; padding:2px 7px;
   border-radius:6px; letter-spacing:.5px; margin-right:6px; }}
 .lbl {{ display:none; color:#718096; font-size:12px; }}
@@ -845,12 +763,12 @@ details.rec > summary::-webkit-details-marker {{ display:none; }}
 .cell-name {{ display:flex; gap:10px; align-items:center; min-width:0; }}
 .rec-more {{ color:#2b6cb0; font-weight:700; font-size:12px; text-align:right; }}
 details.rec[open] .rec-more {{ color:#2a9d8f; }}
-.rec-detail {{ background:#f8fafc; border-radius:10px; padding:14px; margin:0 6px 12px; display:flex;
-  gap:14px; font-size:12px; color:#4a5568; line-height:1.8; }}
+.rec-detail {{ background:var(--sf-elevated); border-radius:10px; padding:14px; margin:0 6px 12px; display:flex;
+  gap:14px; font-size:12px; color:var(--sf-muted); line-height:1.8; }}
 
 /* Match cards */
 .m-top {{ display:flex; gap:16px; align-items:stretch; }}
-.m-link {{ color:#718096; font-size:20px; align-self:center; }}
+.m-link {{ color:var(--sf-muted); font-size:20px; align-self:center; }}
 .m-bottom {{ display:flex; margin-top:16px; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; }}
 
 /* ---------- PHONE ---------- */
@@ -859,6 +777,7 @@ details.rec[open] .rec-more {{ color:#2a9d8f; }}
   .st-key-mobile_nav {{ display:block !important; position:fixed; top:8px; left:8px; z-index:100002; }}
   .st-key-mobile_nav button {{ min-width:44px; min-height:44px; border-radius:8px;
     background:#0d2847 !important; color:#fff !important; border:1px solid #2a9d8f !important; }}
+  .st-key-mobile_nav button * {{ color:#fff !important; }}
   /* Keep Streamlit's collapsed-sidebar control above the app's custom chrome. */
   header[data-testid="stHeader"] {{ height:3.5rem; position:fixed; inset:0 0 auto 0; z-index:100000; pointer-events:none; }}
   header[data-testid="stHeader"] button,
@@ -899,78 +818,8 @@ details.rec[open] .rec-more {{ color:#2a9d8f; }}
 </style>
 """, unsafe_allow_html=True)
 
-theme_css = ""
-if st.session_state.ui_theme == "dark":
-    theme_css = """
-    .stApp { background:var(--sf-bg) !important; color:var(--sf-text) !important; }
-    .stApp div[class*="st-key-card_"], .stApp .how-card,
-    .stApp [data-testid="stDialog"] div[role="dialog"],
-    .stApp [data-testid="stExpander"], .stApp details.rec {
-      background:var(--sf-surface) !important; border-color:var(--sf-border) !important; color:var(--sf-text) !important;
-    }
-    .stApp .top-header { background:#101e31 !important; border-color:#34485f !important; }
-    .stApp .breadcrumb, .stApp .page-sub, .stApp .rec-detail,
-    .stApp [data-testid="stCaptionContainer"], .stApp .th, .stApp .rid {
-      color:var(--sf-muted) !important;
-    }
-    .stApp .breadcrumb strong, .stApp .page-title, .stApp .cell-name,
-    .stApp [data-testid="stWidgetLabel"], .stApp [data-testid="stWidgetLabel"] p,
-    .stApp [data-testid="stMarkdownContainer"], .stApp [data-testid="stMarkdownContainer"] p,
-    .stApp [data-testid="stMarkdownContainer"] li, .stApp [data-testid="stRadio"] label,
-    .stApp [data-testid="stRadio"] label p { color:#e8f0f8 !important; }
-    .stApp [data-testid="stTextInputRootElement"], .stApp [data-testid="stTextAreaRootElement"],
-    .stApp [data-testid="stDateInput"] [role="group"], .stApp [data-testid="stSelectbox"] [role="group"] {
-      background:#0d1b2c !important; border-color:#53677e !important;
-    }
-    .stApp [data-testid="stTextInput"] input, .stApp [data-testid="stTextArea"] textarea,
-    .stApp [data-testid="stDateInput"] input, .stApp [data-testid="stDateInput"] [role="spinbutton"],
-    .stApp [data-testid="stSelectbox"] [role="group"] * {
-      color:#f3f7fb !important; background-color:transparent !important;
-    }
-    .stApp [data-testid="stTextInput"] input::placeholder,
-    .stApp [data-testid="stTextArea"] textarea::placeholder { color:#aebdd0 !important; }
-    .stApp [data-baseweb="popover"] [role="listbox"],
-    .stApp [data-baseweb="popover"] [role="option"] {
-      background:var(--sf-surface) !important; color:var(--sf-text) !important;
-    }
-    .stApp [data-baseweb="popover"] [role="option"]:hover { background:#203b50 !important; }
-    .stApp .rec-detail { background:#0d1b2c !important; }
-    .stApp .pill-lost { background:#3d2a17 !important; color:#ffd08c !important; border-color:#80551e !important; }
-    .stApp .pill-found { background:#123528 !important; color:#9ce3b9 !important; border-color:#28734e !important; }
-    .stApp .pill-open { background:#29384a !important; color:#d5e0eb !important; }
-    .stApp .notif-bar { background:#102f45 !important; border-color:#275c78 !important; color:#c6eaff !important; }
-    .stApp .warn-bar, .stApp [data-testid="stAlert"] {
-      background:#3b2b15 !important; border-color:#795c28 !important; color:#ffe3a9 !important;
-    }
-    .stApp [data-testid="stAlert"] [data-testid="stMarkdownContainer"] p,
-    .stApp [data-testid="stAlert"] [data-testid="stMarkdownContainer"] li { color:#ffe3a9 !important; }
-    .stApp .stat-icon { background:#153b3e !important; color:#baf3e7 !important; }
-    .stApp .rec-more { color:#8cc9ff !important; }
-    .stApp div[class*="st-key-card_"] [style*="background:#fff"],
-    .stApp div[class*="st-key-card_"] [style*="background: #fff"] {
-      background:#142338 !important;
-    }
-    .stApp [style*="color:#1a202c"], .stApp [style*="color: #1a202c"],
-    .stApp [style*="color:#0d2847"], .stApp [style*="color: #0d2847"],
-    .stApp [style*="color:#4a5568"], .stApp [style*="color: #4a5568"],
-    .stApp [style*="color:#718096"], .stApp [style*="color: #718096"] {
-      color:#d5e0eb !important;
-    }
-    .stApp .stButton > button:not([kind="primary"]),
-    .stApp [data-testid="stFormSubmitButton"] button:not([kind="primary"]) {
-      background:#172a40 !important; border-color:#53677e !important; color:#edf4fb !important;
-    }
-    .stApp .stButton > button:hover { border-color:#55c7b5 !important; }
-    """
-else:
-    theme_css = """
-    .stApp { background:var(--sf-bg) !important; color:var(--sf-text) !important; }
-    """
-
 st.markdown(f"""
 <style>
-{theme_variables_css(st.session_state.ui_theme)}
-{theme_css}
 .stButton > button, [data-testid="stFormSubmitButton"] button {{
   transition: transform .2s ease, box-shadow .2s ease, background-color .2s ease, border-color .2s ease;
 }}
@@ -987,9 +836,6 @@ div[class*="st-key-card_"], .st-key-hero, .how-card, .rec-detail {{
 .page-sub {{ font-size:14px; line-height:1.55; }}
 .rid, .th {{ font-size:11px; }}
 button, [role="button"], summary {{ touch-action:manipulation; }}
-button:focus-visible, [role="button"]:focus-visible, summary:focus-visible {{
-  outline:3px solid var(--sf-accent) !important; outline-offset:3px !important;
-}}
 @keyframes sf-enter {{ from {{ opacity:0; transform:translateY(8px); }} to {{ opacity:1; transform:translateY(0); }} }}
 @media (max-width: 900px) {{
   .st-key-body_pad {{ padding:0 20px; }}
@@ -1009,12 +855,10 @@ button:focus-visible, [role="button"]:focus-visible, summary:focus-visible {{
   .st-key-card_form [data-testid="stRadio"] [role="radiogroup"] {{ gap:8px; flex-wrap:wrap; }}
   .stApp .stButton > button, .stApp [data-testid="stFormSubmitButton"] button {{ min-height:46px; }}
 }}
-@media (prefers-reduced-motion: reduce) {{
-  *, *::before, *::after {{ animation-duration:.01ms !important; animation-iteration-count:1 !important;
-    scroll-behavior:auto !important; transition-duration:.01ms !important; }}
-}}
 </style>
 """, unsafe_allow_html=True)
+st.markdown(theme_stylesheet(st.session_state.ui_theme, active_nav_index=active_idx),
+            unsafe_allow_html=True)
 
 # ============================================================
 # SHARED DIALOG
