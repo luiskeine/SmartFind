@@ -97,6 +97,9 @@ CONTRAST_PAIRS = (
     ("muted", "surface"),
     ("placeholder", "surface"),
     ("accent", "surface"),
+    ("muted", "elevated"),
+    ("primary-bg", "surface"),
+    ("primary-bg", "elevated"),
     ("primary-text", "primary-bg"),
     ("secondary-text", "secondary-bg"),
     ("disabled-text", "disabled-bg"),
@@ -136,12 +139,14 @@ def theme_stylesheet(theme, active_nav_index=None):
     active_nav_rule = ""
     if active_nav_index is not None:
         active_nav_rule = f"""
-        .stApp section[data-testid="stSidebar"] .st-key-nav_{active_nav_index} button {{
+        .stApp section[data-testid="stSidebar"] .st-key-nav_{active_nav_index}
+        button[data-testid="stBaseButton-secondary"] {{
           background:var(--sf-sidebar-active-bg) !important;
           color:var(--sf-sidebar-active-text) !important;
           border-color:var(--sf-accent) !important;
         }}
-        .stApp section[data-testid="stSidebar"] .st-key-nav_{active_nav_index} button * {{
+        .stApp section[data-testid="stSidebar"] .st-key-nav_{active_nav_index}
+        button[data-testid="stBaseButton-secondary"] * {{
           color:var(--sf-sidebar-active-text) !important;
         }}
         """
@@ -219,6 +224,72 @@ def theme_stylesheet(theme, active_nav_index=None):
       box-shadow:0 0 0 1px var(--sf-accent) !important;
     }}
 
+    .stApp [data-testid="stFileUploaderDropzone"] {{
+      background:var(--sf-elevated) !important;
+      border:1px solid var(--sf-border) !important;
+      color:var(--sf-text) !important;
+    }}
+    .stApp [data-testid="stFileUploaderDropzoneInstructions"],
+    .stApp [data-testid="stFileUploaderDropzoneInstructions"] * {{
+      color:var(--sf-muted) !important;
+    }}
+    .stApp [data-testid="stFileUploaderDropzone"] [data-testid="stIconMaterial"] {{
+      color:var(--sf-accent) !important;
+    }}
+    .stApp [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"] {{
+      background:var(--sf-secondary-bg) !important;
+      color:var(--sf-secondary-text) !important;
+      border:1px solid var(--sf-secondary-border) !important;
+    }}
+    .stApp [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"] *,
+    .stApp [data-testid="stFileUploaderDropzone"] button[data-testid="stBaseButton-secondary"] [data-testid="stIconMaterial"] {{
+      color:var(--sf-secondary-text) !important;
+      fill:var(--sf-secondary-text) !important;
+    }}
+    .stApp [data-testid="stFileUploaderDropzone"]:hover,
+    .stApp [data-testid="stFileUploaderDropzone"]:focus-within {{
+      border-color:var(--sf-accent) !important;
+    }}
+    .stApp [data-testid="stFileUploaderDropzone"]:focus-within {{
+      box-shadow:0 0 0 2px var(--sf-accent) !important;
+    }}
+    .stApp [data-testid="stFileUploaderDropzone"] button:focus-visible {{
+      outline:3px solid var(--sf-accent) !important;
+      outline-offset:2px !important;
+    }}
+
+    .stApp [data-testid="stRadioOption"] > div > div:first-child {{
+      background:var(--sf-surface) !important;
+      border:1px solid var(--sf-border) !important;
+    }}
+    .stApp [data-testid="stRadioOption"][data-selected="true"] > div > div:first-child {{
+      background:var(--sf-primary-bg) !important;
+      border-color:var(--sf-primary-bg) !important;
+    }}
+    .stApp [data-testid="stRadioOption"] > div > div:first-child > div {{
+      background:var(--sf-surface) !important;
+    }}
+    .stApp [data-testid="stRadioOption"]:hover > div > div:first-child {{
+      border-color:var(--sf-accent) !important;
+    }}
+
+    .stApp [data-testid="stProgressBarTrack"] {{
+      background:var(--sf-elevated) !important;
+    }}
+    .stApp [data-testid="stProgressBarTrack"] > div {{
+      background:var(--sf-primary-bg) !important;
+    }}
+    .stApp [data-testid="stExpander"] summary {{
+      background:var(--sf-surface) !important;
+      color:var(--sf-text) !important;
+    }}
+    .stApp [data-testid="stExpander"] summary:hover {{
+      background:var(--sf-elevated) !important;
+    }}
+    .stApp [data-testid="stExpander"] summary [data-testid="stIconMaterial"] {{
+      color:var(--sf-muted) !important;
+    }}
+
     .stApp .stButton > button,
     .stApp [data-testid="stFormSubmitButton"] button {{
       min-height:44px; border-radius:10px;
@@ -270,15 +341,17 @@ def theme_stylesheet(theme, active_nav_index=None):
     .stApp section[data-testid="stSidebar"] > div {{
       background:var(--sf-sidebar-bg) !important;
     }}
-    .stApp section[data-testid="stSidebar"] .stButton > button,
-    .stApp section[data-testid="stSidebar"] .stButton > button * {{
+    .stApp section[data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-secondary"],
+    .stApp section[data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-secondary"] * {{
       background:transparent !important; color:var(--sf-sidebar-text) !important;
       border-color:transparent !important; box-shadow:none !important;
     }}
-    .stApp section[data-testid="stSidebar"] .stButton > button:hover {{
+    .stApp section[data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-secondary"]:hover {{
       background:rgba(255,255,255,.10) !important;
     }}
-    .stApp section[data-testid="stSidebar"] .stButton > button:hover * {{ color:#ffffff !important; }}
+    .stApp section[data-testid="stSidebar"] .stButton > button[data-testid="stBaseButton-secondary"]:hover * {{
+      color:#ffffff !important;
+    }}
     .stApp section[data-testid="stSidebar"] .menu-label {{
       color:var(--sf-sidebar-muted) !important;
     }}

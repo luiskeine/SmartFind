@@ -680,9 +680,20 @@ class ThemeTests(unittest.TestCase):
     def test_theme_stylesheet_covers_dark_surfaces_and_selected_sidebar_text(self):
         stylesheet = smartfind_theme.theme_stylesheet("dark", active_nav_index=0)
         self.assertIn("background:var(--sf-surface) !important", stylesheet)
-        self.assertIn(".st-key-nav_0 button *", stylesheet)
+        self.assertIn('.stApp section[data-testid="stSidebar"] .st-key-nav_0', stylesheet)
+        self.assertIn('button[data-testid="stBaseButton-secondary"] *', stylesheet)
         self.assertIn("color:var(--sf-sidebar-active-text) !important", stylesheet)
         self.assertIn("color:var(--sf-alert-text) !important", stylesheet)
+
+    def test_theme_stylesheet_overrides_streamlit_native_photo_controls(self):
+        for theme in smartfind_theme.THEME_TOKENS:
+            stylesheet = smartfind_theme.theme_stylesheet(theme)
+            with self.subTest(theme=theme):
+                self.assertIn('[data-testid="stFileUploaderDropzone"]', stylesheet)
+                self.assertIn('[data-testid="stFileUploaderDropzoneInstructions"]', stylesheet)
+                self.assertIn('[data-testid="stRadioOption"][data-selected="true"]', stylesheet)
+                self.assertIn('[data-testid="stProgressBarTrack"] > div', stylesheet)
+                self.assertIn('[data-testid="stExpander"] summary:hover', stylesheet)
 
     def test_theme_stylesheet_defaults_unknown_theme_to_light(self):
         self.assertIn("color-scheme:light", smartfind_theme.theme_stylesheet("unknown"))
