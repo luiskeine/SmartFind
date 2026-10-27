@@ -57,6 +57,18 @@ def initialize_storage():
                 recovery_code_hash TEXT NOT NULL UNIQUE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             )""")
+            connection.execute("""CREATE TABLE IF NOT EXISTS user_preferences (
+                owner_key TEXT PRIMARY KEY,
+                payload JSONB NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""")
+            connection.execute("""CREATE TABLE IF NOT EXISTS report_drafts (
+                owner_key TEXT NOT NULL,
+                report_type TEXT NOT NULL,
+                payload JSONB NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (owner_key, report_type)
+            )""")
             connection.execute("""CREATE TABLE IF NOT EXISTS notifications (
                 id BIGSERIAL PRIMARY KEY,
                 key TEXT NOT NULL UNIQUE,
@@ -80,6 +92,8 @@ def initialize_storage():
             connection.execute("ALTER TABLE reports ENABLE ROW LEVEL SECURITY")
             connection.execute("ALTER TABLE app_meta ENABLE ROW LEVEL SECURITY")
             connection.execute("ALTER TABLE guest_accounts ENABLE ROW LEVEL SECURITY")
+            connection.execute("ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY")
+            connection.execute("ALTER TABLE report_drafts ENABLE ROW LEVEL SECURITY")
             connection.execute("ALTER TABLE notifications ENABLE ROW LEVEL SECURITY")
             connection.commit()
         except Exception:
@@ -148,6 +162,54 @@ def find_guest_account(recovery_code_hash):
             (recovery_code_hash,),
         ).fetchone()
     return row[0] if row else None
+
+
+def load_user_preferences(owner_key):
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT payload::text FROM user_preferences WHERE owner_key = %s",
+            (str(owner_key).strip().casefold(),),
+        ).fetchone()
+    if not row:
+        return {}
+    return json.loads(row[0]) if isinstance(row[0], str) else row[0]
+
+
+def save_user_preferences(owner_key, preferences):
+    payload = json.dumps(dict(preferences), ensure_ascii=False)
+    with _connect() as connection:
+        connection.execute("""INSERT INTO user_preferences (owner_key, payload)
+            VALUES (%s, %s::jsonb)
+            ON CONFLICT(owner_key) DO UPDATE SET payload = excluded.payload,
+            updated_at = now()""",
+                           (str(owner_key).strip().casefold(), payload))
+
+
+def load_report_draft(owner_key, report_type):
+    with _connect() as connection:
+        row = connection.execute("""SELECT payload::text FROM report_drafts
+            WHERE owner_key = %s AND report_type = %s""",
+                                 (str(owner_key).strip().casefold(), str(report_type))).fetchone()
+    if not row:
+        return None
+    return json.loads(row[0]) if isinstance(row[0], str) else row[0]
+
+
+def save_report_draft(owner_key, report_type, payload):
+    with _connect() as connection:
+        connection.execute("""INSERT INTO report_drafts (owner_key, report_type, payload)
+            VALUES (%s, %s, %s::jsonb)
+            ON CONFLICT(owner_key, report_type) DO UPDATE SET payload = excluded.payload,
+            updated_at = now()""",
+                           (str(owner_key).strip().casefold(), str(report_type),
+                            json.dumps(dict(payload), ensure_ascii=False)))
+
+
+def delete_report_draft(owner_key, report_type):
+    with _connect() as connection:
+        connection.execute("""DELETE FROM report_drafts
+            WHERE owner_key = %s AND report_type = %s""",
+                           (str(owner_key).strip().casefold(), str(report_type)))
 
 
 def notification_keys():

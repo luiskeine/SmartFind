@@ -34,12 +34,46 @@ from smartfind_store import (delete_report, load_notifications, load_reports,
                              claim_notification_email, finish_notification_email,
                              configure_supabase, initialize_storage,
                              create_guest_account, find_guest_account,
+                             load_user_preferences, save_user_preferences,
+                             load_report_draft, save_report_draft, delete_report_draft,
                              retry_notification_email, save_notifications, save_report,
                              )
 from smartfind_mail import SMTPDeliveryError, is_configured, send_match_email, test_smtp_connection
+from smartfind_theme import theme_variables_css
 
 st.set_page_config(page_title="SmartFind - Campus Lost & Found", page_icon="🔎",
                    layout="wide", initial_sidebar_state="auto")
+
+st.session_state.setdefault("ui_theme", "light")
+st.markdown(f"""
+<style>
+{theme_variables_css(st.session_state.ui_theme)}
+.stApp {{ background:var(--sf-bg); color:var(--sf-text); }}
+[data-testid="stWidgetLabel"], [data-testid="stWidgetLabel"] p,
+[data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p,
+[data-testid="stMarkdownContainer"], [data-testid="stMarkdownContainer"] p {{ color:var(--sf-text) !important; }}
+[data-testid="stTextInputRootElement"], [data-testid="stTextAreaRootElement"],
+[data-testid="stDateInput"] [role="group"], [data-testid="stSelectbox"] [role="group"] {{
+  background:var(--sf-surface) !important; border:1px solid var(--sf-border) !important;
+  border-radius:10px !important;
+}}
+[data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea,
+[data-testid="stDateInput"] input, [data-testid="stSelectbox"] [role="group"] * {{
+  color:var(--sf-text) !important; background:transparent !important; caret-color:var(--sf-accent) !important;
+}}
+[data-testid="stTextInput"] input::placeholder, [data-testid="stTextArea"] textarea::placeholder {{
+  color:var(--sf-muted) !important; opacity:1 !important;
+}}
+.stButton > button, [data-testid="stFormSubmitButton"] button {{
+  min-height:44px; border-radius:10px; transition:transform .18s ease, box-shadow .18s ease, background-color .18s ease;
+}}
+:focus-visible {{ outline:3px solid var(--sf-accent) !important; outline-offset:2px !important; }}
+@media (prefers-reduced-motion: reduce) {{
+  *, *::before, *::after {{ animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    scroll-behavior:auto !important; transition-duration:.01ms !important; }}
+}}
+</style>
+""", unsafe_allow_html=True)
 
 # ------------------------------------------------------------
 # Compatibility check: tests the APIs this app actually uses.
@@ -78,7 +112,7 @@ def _current_user():
     except Exception:
         auth_config, app_config, supabase_config = {}, {}, {}
 
-    if not st.user.is_logged_in:
+    if not getattr(st.user, "is_logged_in", False):
         configure_supabase(supabase_config.get("database_url", ""))
         if not str(supabase_config.get("database_url", "")).strip():
             st.error("Supabase database_url is required; SQLite storage is no longer supported.")
@@ -149,6 +183,91 @@ if not str(current_user["supabase_database_url"]).strip():
 # Schema setup is an explicit, one-time migration step per app process.  Query
 # functions below only open a short-lived connection for their own operation.
 initialize_storage()
+
+if st.session_state.get("preferences_loaded_for") != current_user["email"]:
+    previous_owner = st.session_state.get("preferences_loaded_for")
+    if previous_owner and previous_owner != current_user["email"]:
+        for state_key in list(st.session_state):
+            if state_key.startswith(("report_", "photo_mode_", "photo_upload_", "photo_camera_")):
+                st.session_state.pop(state_key, None)
+        st.session_state.pop("flash", None)
+        st.session_state.page = "Home"
+    stored_preferences = load_user_preferences(current_user["email"])
+    st.session_state.ui_preferences = stored_preferences
+    st.session_state.ui_theme = stored_preferences.get("theme", "light")
+    if st.session_state.ui_theme not in ("light", "dark"):
+        st.session_state.ui_theme = "light"
+    st.session_state.records_search = stored_preferences.get("records_search", "")
+    st.session_state.records_type_filter = stored_preferences.get("records_type_filter", "Lost & Found")
+    st.session_state.records_category_filter = stored_preferences.get(
+        "records_category_filter", "All categories")
+    st.session_state.records_status_filter = stored_preferences.get(
+        "records_status_filter", "All statuses")
+    st.session_state.theme_dark = st.session_state.ui_theme == "dark"
+    st.session_state.mobile_theme_dark = st.session_state.ui_theme == "dark"
+    st.session_state.preferences_loaded_for = current_user["email"]
+
+if st.session_state.get("drafts_loaded_for") != current_user["email"]:
+    st.session_state.report_drafts = {
+        report_type: load_report_draft(current_user["email"], report_type)
+        for report_type in ("Lost", "Found")
+    }
+    st.session_state.drafts_loaded_for = current_user["email"]
+
+
+def persist_ui_preferences(**updates):
+    preferences = dict(st.session_state.get("ui_preferences", {}))
+    preferences.update(updates)
+    if preferences != st.session_state.get("ui_preferences", {}):
+        save_user_preferences(current_user["email"], preferences)
+        st.session_state.ui_preferences = preferences
+
+
+def update_theme_preference(widget_key):
+    selected_theme = "dark" if st.session_state[widget_key] else "light"
+    st.session_state.ui_theme = selected_theme
+    st.session_state.theme_dark = selected_theme == "dark"
+    st.session_state.mobile_theme_dark = selected_theme == "dark"
+    persist_ui_preferences(theme=selected_theme)
+
+
+def persist_report_draft(report_type, payload):
+    save_report_draft(current_user["email"], report_type, payload)
+    st.session_state.report_drafts[report_type] = dict(payload)
+
+
+def remove_report_draft(report_type):
+    delete_report_draft(current_user["email"], report_type)
+    st.session_state.report_drafts[report_type] = None
+    st.session_state[f"report_wizard_step_{report_type}"] = 1
+    for field in ("category", "brand", "manual_brand", "name", "color", "location",
+                  "description", "date"):
+        st.session_state.pop(f"report_{field}_{report_type}", None)
+
+
+def clear_records_filters():
+    defaults = {
+        "records_search": "",
+        "records_type_filter": "Lost & Found",
+        "records_category_filter": "All categories",
+        "records_status_filter": "All statuses",
+    }
+    st.session_state.update(defaults)
+    persist_ui_preferences(records_search="", records_type_filter="Lost & Found",
+                           records_category_filter="All categories",
+                           records_status_filter="All statuses")
+
+
+def sign_out():
+    if current_user["is_guest"]:
+        st.session_state.pop("guest_account_id", None)
+        st.session_state.pop("guest_recovery_code", None)
+        st.session_state.pop("guest_recovery_input", None)
+        st.session_state.page = "Home"
+        st.rerun()
+    else:
+        st.logout()
+
 
 # ============================================================
 # CONFIGURATION  (edit here — nothing else needs to change)
@@ -258,6 +377,219 @@ def fmt_date(d):
         return datetime.strptime(d, "%Y-%m-%d").strftime("%b %d, %Y")
     except ValueError:
         return d
+
+
+def render_report_wizard(report_type):
+    is_lost = report_type == "Lost"
+    verb = "lost" if is_lost else "found"
+    draft = st.session_state.report_drafts.get(report_type) or {}
+    step_key = f"report_wizard_step_{report_type}"
+    st.session_state.setdefault(step_key, draft.get("step", 1))
+    if st.session_state[step_key] not in (1, 2, 3):
+        st.session_state[step_key] = 1
+    step = st.session_state[step_key]
+    nonce = st.session_state.nonce
+
+    html(f"""<div class="eyebrow">NEW {report_type.upper()} REPORT</div>
+    <div class="page-title">Report {report_type.lower()} item</div>
+    <div class="page-sub">Add a photo if you have one, describe the item, then review before publishing.</div>""")
+    st.progress(step / 3, text=f"Step {step} of 3 · {('Photo' if step == 1 else 'Details' if step == 2 else 'Review')}")
+
+    with st.container(key="card_form"):
+        if draft:
+            st.info("A private draft for this report type is saved to your account.")
+            if st.button("Discard saved draft", key=f"discard_draft_{report_type}"):
+                remove_report_draft(report_type)
+                st.rerun()
+
+        if step == 1:
+            st.markdown("#### 1 · Add a photo")
+            st.caption("Optional. Photo analysis suggests item details; review and correct all suggestions.")
+            st.selectbox("Photo detector model", options=list(MODEL_LABELS),
+                         format_func=MODEL_LABELS.__getitem__, key="vision_model",
+                         help="This choice only changes photo analysis in your session.")
+            upload_mode, camera_mode, no_photo = "Choose / upload", "Take photo", "Continue without photo"
+            mode = st.radio("Photo source", [upload_mode, camera_mode, no_photo],
+                            horizontal=True, key=f"photo_mode_{report_type}_{nonce}")
+            photo_file = None
+            if mode == upload_mode:
+                photo_file = st.file_uploader("Item photo", type=["jpg", "jpeg", "png"],
+                                              key=f"photo_upload_{report_type}_{nonce}")
+            elif mode == camera_mode:
+                photo_file = st.camera_input("Take a photo", key=f"photo_camera_{report_type}_{nonce}")
+
+            photo_bytes = photo_file.getvalue() if photo_file else None
+            photo_uri = make_thumbnail(photo_bytes) if photo_bytes else draft.get("photo")
+            suggestion = draft.get("suggestion")
+            if photo_bytes:
+                try:
+                    with st.spinner("Analyzing the photo…"):
+                        suggestion = analyze_photo(photo_bytes, st.session_state.vision_model)
+                except (NotImplementedError, FileNotFoundError, RuntimeError, ValueError) as exc:
+                    suggestion = {"category": None, "confidence": None, "color": None,
+                                  "brand": None, "brand_candidates": [], "text_candidates": [],
+                                  "message": str(exc)}
+                    st.warning(f"Photo analysis is unavailable: {esc(exc)}. You can still enter the report manually.")
+
+            if photo_uri:
+                html(f'<img src="{photo_uri}" alt="Report photo preview" '
+                     'style="width:140px;height:140px;object-fit:cover;border-radius:12px">')
+            if suggestion:
+                detected = suggestion.get("category") or "No supported item detected"
+                st.caption(f"Suggestion: {detected}. Confirm or change suggestions in the next step.")
+
+            if st.button("Continue to details", type="primary", key=f"photo_next_{report_type}"):
+                persist_report_draft(report_type, {
+                    **draft, "step": 2, "photo": photo_uri, "suggestion": suggestion,
+                    "vision_model": st.session_state.vision_model,
+                })
+                st.session_state[step_key] = 2
+                st.rerun()
+
+        elif step == 2:
+            st.markdown("#### 2 · Describe the item")
+            st.caption("Your draft is private to your account until you explicitly submit it.")
+            suggestion = draft.get("suggestion") or {}
+            suggested_category = suggestion.get("category")
+            category_key = "report_category_" + report_type
+            if st.session_state.get(category_key) not in ALL_CATEGORIES:
+                st.session_state[category_key] = (
+                    draft.get("category") or (
+                        suggested_category if suggested_category in ALL_CATEGORIES else None))
+                if st.session_state[category_key] not in ALL_CATEGORIES:
+                    st.session_state[category_key] = None
+            cat = st.selectbox("Item category *", ALL_CATEGORIES, index=None,
+                               placeholder="Select a category", key=category_key)
+
+            brand_candidates = normalize_brand_candidates(
+                suggestion.get("brand_candidates", []), suggestion.get("brand"))
+            brand_options = ["Unknown / no visible brand"] + list(dict.fromkeys(
+                brand_candidates + brands_for_category(cat))) + ["Other / not listed"]
+            brand_key = "report_brand_" + report_type
+            if st.session_state.get(brand_key) not in brand_options:
+                st.session_state[brand_key] = (
+                    draft.get("brand") if draft.get("brand") in brand_options else
+                    "Other / not listed" if draft.get("brand") else
+                    next((value for value in brand_candidates if value in brand_options),
+                         "Unknown / no visible brand"))
+            brand_choice = st.selectbox("Brand (optional)", brand_options, key=brand_key)
+            manual_brand = ""
+            if brand_choice == "Other / not listed":
+                manual_key = f"report_manual_brand_{report_type}"
+                st.session_state.setdefault(manual_key, draft.get("brand", ""))
+                manual_brand = st.text_input("Enter brand name", key=manual_key)
+            brand_value = normalize_brand(manual_brand) if manual_brand.strip() else ""
+            if brand_choice not in ("Unknown / no visible brand", "Other / not listed"):
+                brand_value = normalize_brand(brand_choice)
+
+            defaults = {
+                "name": draft.get("name", ""),
+                "color": draft.get("color", suggestion.get("color") or ""),
+                "location": draft.get("location", ""),
+                "description": draft.get("description", ""),
+            }
+            for field, value in defaults.items():
+                st.session_state.setdefault(f"report_{field}_{report_type}", value)
+            draft_date = draft.get("date")
+            try:
+                date_default = datetime.strptime(draft_date, "%Y-%m-%d").date() if draft_date else date.today()
+            except ValueError:
+                date_default = date.today()
+            date_key = f"report_date_{report_type}"
+            if date_key not in st.session_state:
+                st.session_state[date_key] = date_default
+
+            with st.form(f"report_details_{report_type}_{nonce}"):
+                name = st.text_input("Item name (optional)", key=f"report_name_{report_type}",
+                                     placeholder="e.g. Black smartphone")
+                color = st.text_input("Color (optional)", key=f"report_color_{report_type}",
+                                      placeholder="e.g. Black")
+                location = st.text_input(
+                    f"Where was it {'last seen' if is_lost else 'found'}? *",
+                    key=f"report_location_{report_type}",
+                    placeholder="e.g. Q-5312, Library 2nd Floor")
+                report_date = st.date_input(f"Date {verb} *", max_value=date.today(),
+                                            key=date_key)
+                description = st.text_area("Description (optional)",
+                                           key=f"report_description_{report_type}",
+                                           placeholder="Distinctive marks, case, stickers, or scratches")
+                st.caption("Drafts are private and are not published until you submit.")
+                back = st.form_submit_button("Back to photo")
+                review = st.form_submit_button("Save draft and review", type="primary",
+                                               **STRETCH_SUBMIT)
+
+            if back or review:
+                errors = []
+                if review and not cat:
+                    errors.append("Please choose an item category.")
+                if review and not location.strip():
+                    errors.append(f"Please enter where the item was {'last seen' if is_lost else 'found'}.")
+                if errors:
+                    for error in errors:
+                        st.error(error)
+                else:
+                    payload = {
+                        **draft, "step": 1 if back else 3, "photo": draft.get("photo"),
+                        "suggestion": suggestion, "category": cat, "brand": brand_value,
+                        "name": name.strip(), "color": color.strip(), "location": location.strip(),
+                        "date": report_date.strftime("%Y-%m-%d"), "description": description.strip(),
+                        "vision_model": st.session_state.vision_model,
+                    }
+                    persist_report_draft(report_type, payload)
+                    st.session_state[step_key] = payload["step"]
+                    st.rerun()
+
+        else:
+            st.markdown("#### 3 · Review and submit")
+            st.caption("Check the details before publishing this report.")
+            st.write(f"**Type:** {report_type}")
+            st.write(f"**Item:** {draft.get('name') or draft.get('category') or '—'}")
+            st.write(f"**Category:** {draft.get('category') or '—'}")
+            st.write(f"**Brand:** {draft.get('brand') or '—'}")
+            st.write(f"**Color:** {draft.get('color') or '—'}")
+            st.write(f"**Location:** {draft.get('location') or '—'}")
+            st.write(f"**Date:** {draft.get('date') or '—'}")
+            st.write(f"**Description:** {draft.get('description') or '—'}")
+            if draft.get("photo"):
+                html(f'<img src="{draft["photo"]}" alt="Attached report photo" '
+                     'style="width:140px;height:140px;object-fit:cover;border-radius:12px">')
+
+            back_col, submit_col = st.columns(2)
+            if back_col.button("Back to details", key=f"review_back_{report_type}"):
+                draft["step"] = 2
+                persist_report_draft(report_type, draft)
+                st.session_state[step_key] = 2
+                st.rerun()
+            if submit_col.button("Submit report", type="primary", key=f"report_submit_{report_type}"):
+                item_name = str(draft.get("name", "")).strip()
+                if not item_name:
+                    item_name = f"{draft.get('color', '').strip()} {draft.get('category', '')}".strip()
+                rid = next_id()
+                report = {
+                    "id": rid, "type": report_type, "item": item_name,
+                    "category": draft["category"], "color": draft.get("color", ""),
+                    "brand": draft.get("brand", ""), "location": draft["location"],
+                    "date": draft["date"], "description": draft.get("description", ""),
+                    "photo": draft.get("photo"),
+                    "status": "Searching" if is_lost else "Reported",
+                    "user_email": current_user["email"],
+                }
+                st.session_state.reports.append(report)
+                save_report(report)
+                remove_report_draft(report_type)
+                before = len(st.session_state.notifications)
+                auto_monitor_and_notify()
+                n_matches = sum(1 for pair in current_pairs() if rid in (pair[1]["id"], pair[2]["id"]))
+                message = f"Report {rid} saved. "
+                if n_matches:
+                    message += f"SmartFind found {n_matches} possible match(es) — see Possible Matches."
+                    if len(st.session_state.notifications) > before:
+                        message += " A new inbox notification was created."
+                else:
+                    message += "No possible matches yet — SmartFind will compare it with new reports as they arrive."
+                st.session_state.flash = ("success", message)
+                st.session_state.nonce += 1
+                st.rerun()
 
 
 # ============================================================
@@ -567,6 +899,123 @@ details.rec[open] .rec-more {{ color:#2a9d8f; }}
 </style>
 """, unsafe_allow_html=True)
 
+theme_css = ""
+if st.session_state.ui_theme == "dark":
+    theme_css = """
+    .stApp { background:var(--sf-bg) !important; color:var(--sf-text) !important; }
+    .stApp div[class*="st-key-card_"], .stApp .how-card,
+    .stApp [data-testid="stDialog"] div[role="dialog"],
+    .stApp [data-testid="stExpander"], .stApp details.rec {
+      background:var(--sf-surface) !important; border-color:var(--sf-border) !important; color:var(--sf-text) !important;
+    }
+    .stApp .top-header { background:#101e31 !important; border-color:#34485f !important; }
+    .stApp .breadcrumb, .stApp .page-sub, .stApp .rec-detail,
+    .stApp [data-testid="stCaptionContainer"], .stApp .th, .stApp .rid {
+      color:var(--sf-muted) !important;
+    }
+    .stApp .breadcrumb strong, .stApp .page-title, .stApp .cell-name,
+    .stApp [data-testid="stWidgetLabel"], .stApp [data-testid="stWidgetLabel"] p,
+    .stApp [data-testid="stMarkdownContainer"], .stApp [data-testid="stMarkdownContainer"] p,
+    .stApp [data-testid="stMarkdownContainer"] li, .stApp [data-testid="stRadio"] label,
+    .stApp [data-testid="stRadio"] label p { color:#e8f0f8 !important; }
+    .stApp [data-testid="stTextInputRootElement"], .stApp [data-testid="stTextAreaRootElement"],
+    .stApp [data-testid="stDateInput"] [role="group"], .stApp [data-testid="stSelectbox"] [role="group"] {
+      background:#0d1b2c !important; border-color:#53677e !important;
+    }
+    .stApp [data-testid="stTextInput"] input, .stApp [data-testid="stTextArea"] textarea,
+    .stApp [data-testid="stDateInput"] input, .stApp [data-testid="stDateInput"] [role="spinbutton"],
+    .stApp [data-testid="stSelectbox"] [role="group"] * {
+      color:#f3f7fb !important; background-color:transparent !important;
+    }
+    .stApp [data-testid="stTextInput"] input::placeholder,
+    .stApp [data-testid="stTextArea"] textarea::placeholder { color:#aebdd0 !important; }
+    .stApp [data-baseweb="popover"] [role="listbox"],
+    .stApp [data-baseweb="popover"] [role="option"] {
+      background:var(--sf-surface) !important; color:var(--sf-text) !important;
+    }
+    .stApp [data-baseweb="popover"] [role="option"]:hover { background:#203b50 !important; }
+    .stApp .rec-detail { background:#0d1b2c !important; }
+    .stApp .pill-lost { background:#3d2a17 !important; color:#ffd08c !important; border-color:#80551e !important; }
+    .stApp .pill-found { background:#123528 !important; color:#9ce3b9 !important; border-color:#28734e !important; }
+    .stApp .pill-open { background:#29384a !important; color:#d5e0eb !important; }
+    .stApp .notif-bar { background:#102f45 !important; border-color:#275c78 !important; color:#c6eaff !important; }
+    .stApp .warn-bar, .stApp [data-testid="stAlert"] {
+      background:#3b2b15 !important; border-color:#795c28 !important; color:#ffe3a9 !important;
+    }
+    .stApp [data-testid="stAlert"] [data-testid="stMarkdownContainer"] p,
+    .stApp [data-testid="stAlert"] [data-testid="stMarkdownContainer"] li { color:#ffe3a9 !important; }
+    .stApp .stat-icon { background:#153b3e !important; color:#baf3e7 !important; }
+    .stApp .rec-more { color:#8cc9ff !important; }
+    .stApp div[class*="st-key-card_"] [style*="background:#fff"],
+    .stApp div[class*="st-key-card_"] [style*="background: #fff"] {
+      background:#142338 !important;
+    }
+    .stApp [style*="color:#1a202c"], .stApp [style*="color: #1a202c"],
+    .stApp [style*="color:#0d2847"], .stApp [style*="color: #0d2847"],
+    .stApp [style*="color:#4a5568"], .stApp [style*="color: #4a5568"],
+    .stApp [style*="color:#718096"], .stApp [style*="color: #718096"] {
+      color:#d5e0eb !important;
+    }
+    .stApp .stButton > button:not([kind="primary"]),
+    .stApp [data-testid="stFormSubmitButton"] button:not([kind="primary"]) {
+      background:#172a40 !important; border-color:#53677e !important; color:#edf4fb !important;
+    }
+    .stApp .stButton > button:hover { border-color:#55c7b5 !important; }
+    """
+else:
+    theme_css = """
+    .stApp { background:var(--sf-bg) !important; color:var(--sf-text) !important; }
+    """
+
+st.markdown(f"""
+<style>
+{theme_variables_css(st.session_state.ui_theme)}
+{theme_css}
+.stButton > button, [data-testid="stFormSubmitButton"] button {{
+  transition: transform .2s ease, box-shadow .2s ease, background-color .2s ease, border-color .2s ease;
+}}
+.stButton > button:hover, [data-testid="stFormSubmitButton"] button:hover {{
+  transform:translateY(-1px); box-shadow:0 5px 14px rgba(13,40,71,.12);
+}}
+.stButton > button:active, [data-testid="stFormSubmitButton"] button:active {{
+  transform:translateY(0); box-shadow:none;
+}}
+div[class*="st-key-card_"] {{ animation:sf-enter .26s ease-out both; }}
+div[class*="st-key-card_"], .st-key-hero, .how-card, .rec-detail {{
+  overflow-wrap:anywhere; min-width:0;
+}}
+.page-sub {{ font-size:14px; line-height:1.55; }}
+.rid, .th {{ font-size:11px; }}
+button, [role="button"], summary {{ touch-action:manipulation; }}
+button:focus-visible, [role="button"]:focus-visible, summary:focus-visible {{
+  outline:3px solid var(--sf-accent) !important; outline-offset:3px !important;
+}}
+@keyframes sf-enter {{ from {{ opacity:0; transform:translateY(8px); }} to {{ opacity:1; transform:translateY(0); }} }}
+@media (max-width: 900px) {{
+  .st-key-body_pad {{ padding:0 20px; }}
+  .rec-head, .rec-summary {{ grid-template-columns:2fr 1fr 1.4fr 1fr; }}
+  .rec-summary > :nth-child(3), .rec-summary > :nth-child(5) {{ display:none; }}
+}}
+@media (max-width: 700px) {{
+  .st-key-body_pad {{ padding:0 12px !important; }}
+  .top-header {{ padding-right:12px; }}
+  .st-key-body_pad [data-testid="stHorizontalBlock"] {{ flex-wrap:wrap !important; gap:10px; }}
+  .st-key-body_pad [data-testid="column"], .st-key-body_pad [data-testid="stColumn"] {{
+    min-width:min(100%, 320px) !important; flex:1 1 min(100%, 320px) !important; width:auto !important;
+  }}
+  .rec-summary {{ grid-template-columns:1fr 1fr; }}
+  .rec-summary > :nth-child(3), .rec-summary > :nth-child(5) {{ display:block; }}
+  .st-key-card_admin [data-testid="stHorizontalBlock"] {{ gap:8px; }}
+  .st-key-card_form [data-testid="stRadio"] [role="radiogroup"] {{ gap:8px; flex-wrap:wrap; }}
+  .stApp .stButton > button, .stApp [data-testid="stFormSubmitButton"] button {{ min-height:46px; }}
+}}
+@media (prefers-reduced-motion: reduce) {{
+  *, *::before, *::after {{ animation-duration:.01ms !important; animation-iteration-count:1 !important;
+    scroll-behavior:auto !important; transition-duration:.01ms !important; }}
+}}
+</style>
+""", unsafe_allow_html=True)
+
 # ============================================================
 # SHARED DIALOG
 # ============================================================
@@ -574,9 +1023,15 @@ details.rec[open] .rec-more {{ color:#2a9d8f; }}
 with st.container(key="mobile_nav"):
     with st.popover("☰ Menu"):
         st.caption("Navigate SmartFind")
+        st.toggle("Dark theme", key="mobile_theme_dark",
+                  on_change=update_theme_preference, args=("mobile_theme_dark",))
         for i, (name, icon) in enumerate(PAGES):
             if st.button(f"{icon}  {name}", key=f"mobile_nav_{i}", **STRETCH):
                 navigate(name)
+        if current_user["is_guest"] and st.session_state.get("guest_recovery_code"):
+            st.caption("Save this guest recovery code privately; it is shown only once.")
+            st.code(st.session_state.guest_recovery_code)
+        st.button("Sign out", key="mobile_sign_out", on_click=sign_out, **STRETCH)
 
 @st.dialog("Report details")
 def show_details(rid):
@@ -610,6 +1065,8 @@ with st.sidebar:
         label = f"{icon}   {name} ({unread_count})" if name == "Notifications" and unread_count else f"{icon}   {name}"
         if st.button(label, key=f"nav_{i}", **STRETCH):
             navigate(name)
+    st.toggle("Dark theme", key="theme_dark",
+              on_change=update_theme_preference, args=("theme_dark",))
     role_label = "Guest" if current_user["is_guest"] else current_user["role"].title()
     st.caption(f"{current_user['name']} · {role_label}")
     if current_user["is_guest"] and st.session_state.get("guest_recovery_code"):
@@ -619,16 +1076,6 @@ with st.sidebar:
             if st.button("I've saved my code", key="guest_code_saved", **STRETCH):
                 st.session_state.pop("guest_recovery_code", None)
                 st.rerun()
-
-    def sign_out():
-        if current_user["is_guest"]:
-            st.session_state.pop("guest_account_id", None)
-            st.session_state.pop("guest_recovery_code", None)
-            st.session_state.pop("guest_recovery_input", None)
-            st.session_state.page = "Home"
-            st.rerun()
-        else:
-            st.logout()
 
     st.button("Sign out", on_click=sign_out, **STRETCH)
     html("""
@@ -750,177 +1197,7 @@ with body:
     # REPORT LOST / FOUND  (same workflow, different wording)
     # ========================================================
     elif active in ("Report Lost Item", "Report Found Item"):
-        is_lost = active == "Report Lost Item"
-        rtype = "Lost" if is_lost else "Found"
-        nonce = st.session_state.nonce
-        verb = "lost" if is_lost else "found"
-
-        html(f"""<div class="eyebrow">NEW {rtype.upper()} REPORT</div>
-        <div class="page-title">Report {rtype} Item</div>
-        <div class="page-sub">A photo is optional. YOLO, OCR text, and pixel color are suggestions only; confirm or correct them. Fields marked * are required.</div>""")
-
-        flash = st.session_state.pop("flash", None)
-        if flash:
-            getattr(st, flash[0])(flash[1])
-
-        with st.container(key="card_form"):
-            # ---------------- Step 1: photo ----------------
-            st.markdown("##### 📷 Step 1 — Add a photo")
-            st.caption("Optional. The trained YOLO model detects an item crop; OCR and color are best-effort suggestions that you can edit.")
-            st.selectbox(
-                "Photo detector model",
-                options=list(MODEL_LABELS),
-                format_func=MODEL_LABELS.__getitem__,
-                key="vision_model",
-                help="This choice only changes photo analysis in your signed-in session.",
-            )
-            UP, CAM, NONE = "📁 Choose / upload", "📸 Take photo", "✍️ No photo"
-            mode = st.radio("Photo source", [UP, CAM, NONE], horizontal=True,
-                            label_visibility="collapsed", key=f"mode_{rtype}_{nonce}")
-            photo_file = None
-            if mode == UP:
-                photo_file = st.file_uploader("Photo", type=["jpg", "jpeg", "png"],
-                                              label_visibility="collapsed", key=f"up_{rtype}_{nonce}")
-            elif mode == CAM:
-                photo_file = st.camera_input("Take a photo", label_visibility="collapsed",
-                                             key=f"cam_{rtype}_{nonce}")
-            else:
-                st.info("No problem — you can report without a photo. Just fill in the details below.")
-
-            photo_bytes = photo_file.getvalue() if photo_file else None
-            photo_uri, suggestion = None, None
-            if photo_bytes:
-                photo_uri = make_thumbnail(photo_bytes)
-                try:
-                    with st.spinner("Detecting item and analyzing its crop…"):
-                        suggestion = analyze_photo(photo_bytes, st.session_state.vision_model)
-                except (NotImplementedError, FileNotFoundError, RuntimeError, ValueError) as exc:
-                    suggestion = {"category": None, "confidence": None, "color": None,
-                                  "brand": None, "brand_candidates": [], "text_candidates": [],
-                                  "message": str(exc)}
-                    st.warning(f"Photo analysis is unavailable: {esc(exc)}. You can still enter the report manually.")
-                img_tag = (f'<img src="{photo_uri}" style="width:84px;height:84px;object-fit:cover;'
-                           f'border-radius:10px;flex-shrink:0">') if photo_uri else ""
-                if suggestion and suggestion["category"]:
-                    cat_icon = CATEGORY_ICONS.get(suggestion["category"], "")
-                    tag = '<span class="sim-tag">YOLO SUGGESTION</span>'
-                    conf = suggestion["confidence"]
-                    note = (f"Detection confidence: <strong>{conf:.0f}%</strong>; not a match probability. "
-                            "Confirm or change the category. Brand text and color are separate suggestions.")
-                    brand_suggestions = suggestion.get("brand_candidates", [])
-                    if brand_suggestions:
-                        candidate_text = ", ".join(esc(candidate) for candidate in brand_suggestions)
-                        note += f' Possible brand-name reads: <strong>{candidate_text}</strong> (preselected below when recognized).'
-                    other_text = suggestion.get("text_candidates", [])
-                    if other_text:
-                        candidate_text = ", ".join(esc(candidate) for candidate in other_text)
-                        note += f' Other OCR text: {candidate_text}.'
-                    if suggestion.get("color"):
-                        note += f' Pixel color estimate: <strong>{esc(suggestion["color"])}</strong> (confirm or edit).'
-                    body_txt = (f'<div style="color:#2b6cb0;font-size:10px;font-weight:800">{tag}SUGGESTED CATEGORY</div>'
-                                f'<div style="font-size:17px;font-weight:800;color:#1a202c">{cat_icon} {suggestion["category"]}</div>'
-                                f'<div style="color:#4a5568;font-size:11px;margin-top:4px;line-height:1.5">{note}</div>')
-                else:
-                    fallback_notes = []
-                    if suggestion.get("color"):
-                        fallback_notes.append(
-                            f'Central-image color estimate: <strong>{esc(suggestion["color"])}</strong> '
-                            '(background may affect it).')
-                    if suggestion.get("brand_candidates"):
-                        likely = ", ".join(esc(value) for value in suggestion["brand_candidates"])
-                        fallback_notes.append(f'Possible known brand text: <strong>{likely}</strong>.')
-                    if suggestion.get("text_candidates"):
-                        raw_text = ", ".join(esc(value) for value in suggestion["text_candidates"])
-                        fallback_notes.append(f'Readable photo text: {raw_text}.')
-                    fallback_detail = " ".join(fallback_notes)
-                    body_txt = ('<div style="color:#718096;font-size:10px;font-weight:800">NO SUGGESTION</div>'
-                                '<div style="font-size:13px;font-weight:700;color:#1a202c">No item category detected; image analysis still ran.</div>'
-                                f'<div style="color:#4a5568;font-size:11px;margin-top:4px">'
-                                f'{esc(suggestion.get("message") or "No trained object was detected.")} '
-                                f'{fallback_detail} Choose the category manually below.</div>')
-                html(f"""<div style="display:flex;gap:14px;align-items:center;background:#ebf8ff;border:1px solid #bee3f8;
-                padding:14px;border-radius:12px;margin-top:10px">{img_tag}<div>{body_txt}</div></div>""")
-
-            st.divider()
-
-            # ---------------- Step 2: details ----------------
-            st.markdown("##### 📝 Step 2 — Confirm the details")
-            sug_cat = suggestion["category"] if suggestion else None
-            sug_col = (suggestion.get("color") if suggestion else None) or ""
-            brand_candidates = normalize_brand_candidates(
-                suggestion.get("brand_candidates", []) if suggestion else [],
-                suggestion.get("brand") if suggestion else None,
-            )
-            sig = hashlib.md5(photo_bytes).hexdigest()[:8] if photo_bytes else "nophoto"
-            cat_index = ALL_CATEGORIES.index(sug_cat) if sug_cat in ALL_CATEGORIES else None
-            cat = st.selectbox("Item category *", ALL_CATEGORIES, index=cat_index,
-                               placeholder="Select a category", key=f"category_{rtype}_{nonce}_{sig}")
-            category_brands = brands_for_category(cat)
-            known_brands = list(dict.fromkeys(brand_candidates + category_brands))
-            brand_options = ["Unknown / no visible brand"] + known_brands + ["Other / not listed"]
-            suggested_brand = next((brand for brand in brand_candidates if brand in known_brands), None)
-            brand_index = brand_options.index(suggested_brand) if suggested_brand else 0
-            brand_choice = st.selectbox(
-                "Brand (optional; detected brand is preselected)", brand_options,
-                index=brand_index,
-                key=f"brand_choice_{rtype}_{nonce}_{st.session_state.vision_model}_{sig}")
-            manual_brand = ""
-            if brand_choice == "Other / not listed":
-                manual_brand = st.text_input(
-                    "Enter brand name", placeholder="Enter the brand as shown on the item",
-                    key=f"brand_other_{rtype}_{nonce}_{sig}")
-            brand_value = (normalize_brand(manual_brand) if manual_brand.strip() else "")
-            if brand_choice not in ("Unknown / no visible brand", "Other / not listed"):
-                brand_value = normalize_brand(brand_choice)
-            default_name = f"{sug_col} {sug_cat}".strip() if sug_cat else ""
-
-            with st.form(f"form_{rtype}_{nonce}_{sig}"):
-                name = st.text_input("Item name (optional)", value=default_name,
-                                     placeholder="Filled in from the category if left blank")
-                color = st.text_input("Color (optional; confirm image estimate)", value=sug_col, placeholder="e.g. Black")
-                loc = st.text_input(f"Where was it {'last seen' if is_lost else 'found'}? *",
-                                    placeholder="e.g. Q-5312, Library 2nd Floor")
-                dt = st.date_input(f"Date {verb} *", value=date.today(), max_value=date.today())
-                desc = st.text_area("Description (optional)",
-                                    placeholder="Brand, case, stickers, scratches or other distinguishing features")
-                owner_label = "Guest account" if current_user["is_guest"] else current_user["email"]
-                st.caption(f"Report owner: {owner_label}")
-                submit = st.form_submit_button(f"Submit {verb} report", **STRETCH_SUBMIT)
-
-            if submit:
-                errors = []
-                if not cat:
-                    errors.append("Please choose an item category.")
-                if not loc.strip():
-                    errors.append(f"Please enter where the item was {'last seen' if is_lost else 'found'}.")
-                for e in errors:
-                    st.error(e)
-                if not errors:
-                    color_v = color.strip()
-                    item_name = name.strip()
-                    if not item_name or (item_name == default_name and cat != sug_cat):
-                        item_name = f"{color_v} {cat}".strip()
-                    rid = next_id()
-                    st.session_state.reports.append({
-                        "id": rid, "type": rtype, "item": item_name, "category": cat, "color": color_v,
-                        "brand": brand_value, "location": loc.strip(), "date": dt.strftime("%Y-%m-%d"), "description": desc.strip(),
-                        "photo": photo_uri, "status": "Searching" if is_lost else "Reported",
-                        "user_email": current_user["email"]})
-                    save_report(st.session_state.reports[-1])
-                    before = len(st.session_state.notifications)
-                    auto_monitor_and_notify()
-                    n_matches = sum(1 for p in current_pairs() if rid in (p[1]["id"], p[2]["id"]))
-                    msg = f"Report {rid} saved. "
-                    if n_matches:
-                        msg += f"SmartFind found {n_matches} possible match(es) — see Possible Matches."
-                        if len(st.session_state.notifications) > before:
-                            msg += " A new inbox notification was created."
-                        st.session_state.flash = ("success", msg)
-                    else:
-                        msg += "No possible matches yet — SmartFind will compare it with new reports as they arrive."
-                        st.session_state.flash = ("success", msg)
-                    st.session_state.nonce += 1
-                    st.rerun()
+        render_report_wizard("Lost" if active == "Report Lost Item" else "Found")
 
     # ========================================================
     # RECORDS
@@ -929,13 +1206,29 @@ with body:
         html("""<div class="eyebrow">CAMPUS RECORDS</div><div class="page-title">Lost & Found Records</div>
         <div class="page-sub">Search found reports and your own lost reports. Administrators can review all records.</div>""")
 
-        q = st.text_input("Search", placeholder="Search by item name, category, brand or location…",
-                          label_visibility="collapsed")
-        f1, f2, f3 = st.columns(3)
-        type_f = f1.selectbox("Type", ["Lost & Found", "Lost", "Found"], label_visibility="collapsed")
-        cat_f = f2.selectbox("Category", ["All categories"] + ALL_CATEGORIES, label_visibility="collapsed")
-        stat_f = f3.selectbox("Status", ["All statuses"] + sorted({r["status"] for r in st.session_state.reports}),
-                              label_visibility="collapsed")
+        status_options = ["All statuses"] + sorted({r["status"] for r in st.session_state.reports})
+        if st.session_state.records_type_filter not in ("Lost & Found", "Lost", "Found"):
+            st.session_state.records_type_filter = "Lost & Found"
+        if st.session_state.records_category_filter not in ["All categories"] + ALL_CATEGORIES:
+            st.session_state.records_category_filter = "All categories"
+        if st.session_state.records_status_filter not in status_options:
+            st.session_state.records_status_filter = "All statuses"
+        with st.form("records_filter_form"):
+            q = st.text_input("Search records", placeholder="Search by item name, category, brand or location…",
+                              key="records_search")
+            f1, f2, f3 = st.columns(3)
+            type_f = f1.selectbox("Type", ["Lost & Found", "Lost", "Found"],
+                                  key="records_type_filter")
+            cat_f = f2.selectbox("Category", ["All categories"] + ALL_CATEGORIES,
+                                 key="records_category_filter")
+            stat_f = f3.selectbox("Status", status_options, key="records_status_filter")
+            apply_filters = st.form_submit_button("Apply filters", type="primary")
+        if apply_filters:
+            persist_ui_preferences(records_search=q, records_type_filter=type_f,
+                                   records_category_filter=cat_f, records_status_filter=stat_f)
+        clear_col, _ = st.columns([1, 4])
+        clear_col.button("Clear filters", key="clear_record_filters",
+                         on_click=clear_records_filters)
 
         recs = list(reversed(st.session_state.reports))  # newest first
         if current_user["role"] != "admin":

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import smartfind_mail
 import smartfind_vision
 import smartfind_store
+import smartfind_theme
 from smartfind_auth import create_guest_credentials, guest_code_digest, resolve_role
 from smartfind_core import (NOTIFY_THRESHOLD, calculate_match_score, compare_locations,
                             find_pairs, new_notifications, normalize_location)
@@ -530,6 +531,10 @@ class ReportStoreTests(unittest.TestCase):
                 self.assertTrue(any("CREATE TABLE" in statement for statement in ddl))
                 self.assertTrue(any("CREATE TABLE IF NOT EXISTS guest_accounts" in statement
                                     for statement in ddl))
+                self.assertTrue(any("CREATE TABLE IF NOT EXISTS user_preferences" in statement
+                                    for statement in ddl))
+                self.assertTrue(any("CREATE TABLE IF NOT EXISTS report_drafts" in statement
+                                    for statement in ddl))
                 self.assertTrue(any("ENABLE ROW LEVEL SECURITY" in statement for statement in ddl))
                 with smartfind_store._connect() as connection:
                     connection.execute("SELECT payload::text FROM reports")
@@ -568,6 +573,44 @@ class ReportStoreTests(unittest.TestCase):
         self.assertEqual(connection.statements[0][1], (guest_id, code_hash))
         self.assertIn("WHERE recovery_code_hash = %s", connection.statements[1][0])
         self.assertEqual(connection.statements[1][1], (code_hash,))
+
+    def test_ui_preferences_and_drafts_are_scoped_to_normalized_owner(self):
+        class FakeCursor:
+            rowcount = 1
+
+            def __init__(self, row=None):
+                self.row = row
+
+            def fetchone(self):
+                return self.row
+
+        class FakeConnection:
+            def __init__(self):
+                self.statements = []
+
+            def execute(self, statement, params=None):
+                self.statements.append((statement, params))
+                if "FROM user_preferences" in statement:
+                    return FakeCursor(({"theme": "dark"},))
+                if "FROM report_drafts" in statement:
+                    return FakeCursor(({"location": "Library"},))
+                return FakeCursor()
+
+        connection = FakeConnection()
+        with patch.object(smartfind_store, "_connect", return_value=nullcontext(connection)):
+            self.assertEqual(smartfind_store.load_user_preferences("User@Example.com"),
+                             {"theme": "dark"})
+            smartfind_store.save_user_preferences("User@Example.com", {"theme": "dark"})
+            self.assertEqual(smartfind_store.load_report_draft("User@Example.com", "Lost"),
+                             {"location": "Library"})
+            smartfind_store.save_report_draft("User@Example.com", "Lost", {"location": "Library"})
+            smartfind_store.delete_report_draft("User@Example.com", "Lost")
+
+        self.assertEqual(connection.statements[0][1], ("user@example.com",))
+        self.assertEqual(connection.statements[1][1][0], "user@example.com")
+        self.assertEqual(connection.statements[2][1], ("user@example.com", "Lost"))
+        self.assertEqual(connection.statements[3][1][:2], ("user@example.com", "Lost"))
+        self.assertEqual(connection.statements[4][1], ("user@example.com", "Lost"))
 
     def test_guest_notifications_are_in_app_only(self):
         class FakeCursor:
@@ -615,6 +658,19 @@ class AuthenticationTests(unittest.TestCase):
         self.assertIsNone(guest_code_digest("not-a-valid-code"))
 
 
+class ThemeTests(unittest.TestCase):
+    def test_theme_text_tokens_meet_wcag_aa_contrast_on_surfaces(self):
+        for tokens in smartfind_theme.THEME_TOKENS.values():
+            for foreground in ("text", "muted", "accent"):
+                with self.subTest(foreground=foreground, surface=tokens["surface"]):
+                    self.assertGreaterEqual(
+                        smartfind_theme.contrast_ratio(tokens[foreground], tokens["surface"]), 4.5)
+
+    def test_theme_variables_are_explicit_and_unknown_theme_falls_back_to_light(self):
+        self.assertIn("--sf-bg:#0b1525", smartfind_theme.theme_variables_css("dark"))
+        self.assertIn("--sf-text:#0d2847", smartfind_theme.theme_variables_css("unknown"))
+
+
 class MobileNavigationTests(unittest.TestCase):
     def test_mobile_menu_is_visible_and_uses_the_same_navigation_targets(self):
         source = Path("main.py").read_text(encoding="utf-8")
@@ -627,18 +683,34 @@ class MobileNavigationTests(unittest.TestCase):
 
     def test_each_session_selects_and_passes_its_own_detector(self):
         source = Path("main.py").read_text(encoding="utf-8")
-        step_one = source[source.index("# ---------------- Step 1: photo ----------------"):
-                           source.index("# ---------------- Step 2: details ----------------")]
+        step_one = source[source.index('if step == 1:'):
+                           source.index('elif step == 2:')]
         self.assertIn('key="vision_model"', step_one)
         self.assertIn("analyze_photo(photo_bytes, st.session_state.vision_model)", source)
-        self.assertIn("This choice only changes photo analysis in your signed-in session.", source)
+        self.assertIn("This choice only changes photo analysis in your session.", source)
         self.assertNotIn('key="vision_model"', source[source.index("with st.sidebar:"):source.index('html(f"""', source.index("with st.sidebar:"))])
 
     def test_detected_brand_is_preselected_in_report_form(self):
         source = Path("main.py").read_text(encoding="utf-8")
         self.assertIn("normalize_brand_candidates(", source)
-        self.assertIn("Brand (optional; detected brand is preselected)", source)
-        self.assertIn("brand_index = brand_options.index(suggested_brand) if suggested_brand else 0", source)
+        self.assertIn('brand_candidates + brands_for_category(cat)', source)
+        self.assertIn('brand_candidates if value in brand_options', source)
+
+    def test_wizard_requires_a_review_before_publishing_and_persists_drafts(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        self.assertIn('st.progress(step / 3', source)
+        self.assertIn('"Save draft and review"', source)
+        self.assertIn('"Submit report"', source)
+        self.assertIn("persist_report_draft(report_type", source)
+        self.assertIn("remove_report_draft(report_type)", source)
+
+    def test_theme_motion_and_responsive_styles_are_explicit(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        self.assertIn('st.toggle("Dark theme"', source)
+        self.assertIn("@media (prefers-reduced-motion: reduce)", source)
+        self.assertIn("@media (max-width: 900px)", source)
+        self.assertIn("@media (max-width: 700px)", source)
+        self.assertIn(":focus-visible", source)
 
 
 class EmailDeliveryTests(unittest.TestCase):
