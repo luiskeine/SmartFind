@@ -52,6 +52,11 @@ def initialize_storage():
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             )""")
+            connection.execute("""CREATE TABLE IF NOT EXISTS guest_accounts (
+                id TEXT PRIMARY KEY,
+                recovery_code_hash TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+            )""")
             connection.execute("""CREATE TABLE IF NOT EXISTS notifications (
                 id BIGSERIAL PRIMARY KEY,
                 key TEXT NOT NULL UNIQUE,
@@ -74,6 +79,7 @@ def initialize_storage():
             # connections continue to use the configured database role.
             connection.execute("ALTER TABLE reports ENABLE ROW LEVEL SECURITY")
             connection.execute("ALTER TABLE app_meta ENABLE ROW LEVEL SECURITY")
+            connection.execute("ALTER TABLE guest_accounts ENABLE ROW LEVEL SECURITY")
             connection.execute("ALTER TABLE notifications ENABLE ROW LEVEL SECURITY")
             connection.commit()
         except Exception:
@@ -129,6 +135,21 @@ def delete_report(report_id):
         connection.execute(f"DELETE FROM reports WHERE id = {placeholder}", (report_id,))
 
 
+def create_guest_account(guest_id, recovery_code_hash):
+    with _connect() as connection:
+        connection.execute("INSERT INTO guest_accounts (id, recovery_code_hash) VALUES (%s, %s)",
+                           (guest_id, recovery_code_hash))
+
+
+def find_guest_account(recovery_code_hash):
+    with _connect() as connection:
+        row = connection.execute(
+            "SELECT id FROM guest_accounts WHERE recovery_code_hash = %s",
+            (recovery_code_hash,),
+        ).fetchone()
+    return row[0] if row else None
+
+
 def notification_keys():
     with _connect() as connection:
         rows = connection.execute("SELECT key FROM notifications").fetchall()
@@ -144,11 +165,12 @@ def save_notifications(notifications):
         created = 0
         for entry in notifications:
             cursor = connection.execute(f"""INSERT INTO notifications
-                (key, pair_key, recipient, item, score, created_at)
-                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+                (key, pair_key, recipient, item, score, created_at, email_status)
+                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
                 ON CONFLICT (key) DO NOTHING""",
                                (entry["key"], entry["pair_key"], entry["recipient"], entry["item"],
-                                entry["score"], entry["time"]))
+                                entry["score"], entry["time"],
+                                "not_applicable" if str(entry["recipient"]).startswith("guest:") else "pending"))
             created += cursor.rowcount
         return created
 
@@ -172,7 +194,8 @@ def load_notifications(recipient, unread_only=False):
 def pending_notification_emails():
     with _connect() as connection:
         rows = connection.execute("""SELECT id, key, pair_key, recipient, item, score, created_at
-            FROM notifications WHERE email_status = 'pending' ORDER BY id""").fetchall()
+            FROM notifications WHERE email_status = 'pending'
+            AND recipient NOT LIKE 'guest:%' ORDER BY id""").fetchall()
     columns = ("id", "key", "pair_key", "recipient", "item", "score", "time")
     return [dict(zip(columns, row)) for row in rows]
 
@@ -238,4 +261,3 @@ def mark_all_notifications_read(recipient, timestamp):
         connection.execute(f"""UPDATE notifications SET read_at = {placeholder}
             WHERE recipient = {placeholder} AND read_at IS NULL""",
                            (timestamp, str(recipient).strip().casefold()))
-

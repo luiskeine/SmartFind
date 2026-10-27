@@ -23,7 +23,7 @@ import streamlit as st
 
 from smartfind_core import (MATCH_THRESHOLD, NOTIFY_THRESHOLD, calculate_match_score,  # noqa: F401
                             find_pairs, new_notifications)
-from smartfind_auth import resolve_role
+from smartfind_auth import create_guest_credentials, guest_code_digest, resolve_role
 from smartfind_vision import (MODEL_LABELS, MODEL_PATHS, TRAINED_CATEGORIES,
                               brands_for_category, classify_image, normalize_brand,
                               normalize_brand_candidates, normalize_category)
@@ -33,6 +33,7 @@ from smartfind_store import (delete_report, load_notifications, load_reports,
                              notification_keys, pending_notification_emails,
                              claim_notification_email, finish_notification_email,
                              configure_supabase, initialize_storage,
+                             create_guest_account, find_guest_account,
                              retry_notification_email, save_notifications, save_report,
                              )
 from smartfind_mail import SMTPDeliveryError, is_configured, send_match_email, test_smtp_connection
@@ -77,6 +78,47 @@ def _current_user():
     except Exception:
         auth_config, app_config, supabase_config = {}, {}, {}
 
+    if not st.user.is_logged_in:
+        configure_supabase(supabase_config.get("database_url", ""))
+        if not str(supabase_config.get("database_url", "")).strip():
+            st.error("Supabase database_url is required; SQLite storage is no longer supported.")
+            st.info("Add [supabase].database_url to Streamlit Secrets before using SmartFind.")
+            st.stop()
+
+        guest_id = st.session_state.get("guest_account_id")
+        if guest_id:
+            st.session_state.pop("guest_recovery_input", None)
+            return {"email": f"guest:{guest_id}", "name": "Guest", "role": "student",
+                    "is_guest": True, "supabase_database_url": supabase_config.get("database_url", "")}
+
+        st.markdown('<div class="page-title">SmartFind sign in</div>', unsafe_allow_html=True)
+        st.caption("Sign in with a verified campus account or continue as a guest. Guests can submit reports and receive in-app match notifications.")
+        required_auth = ("redirect_uri", "cookie_secret", "client_id", "client_secret",
+                         "server_metadata_url")
+        oidc_configured = all(str(auth_config.get(key, "")).strip() for key in required_auth)
+        if oidc_configured:
+            st.button("Continue with Google", on_click=st.login, type="primary")
+        else:
+            st.info("Google sign-in is unavailable until OIDC is configured. You can still continue as a guest.")
+
+        if st.button("Continue as guest"):
+            guest_id, recovery_code, code_hash = create_guest_credentials()
+            create_guest_account(guest_id, code_hash)
+            st.session_state.guest_account_id = guest_id
+            st.session_state.guest_recovery_code = recovery_code
+            st.rerun()
+
+        st.markdown("#### Return to a guest account")
+        recovery_code = st.text_input("Guest recovery code", type="password", key="guest_recovery_input")
+        if st.button("Resume guest account"):
+            code_hash = guest_code_digest(recovery_code)
+            guest_id = find_guest_account(code_hash) if code_hash else None
+            if guest_id:
+                st.session_state.guest_account_id = guest_id
+                st.rerun()
+            st.error("That recovery code is invalid. Check it and try again.")
+        st.stop()
+
     required_auth = ("redirect_uri", "cookie_secret", "client_id", "client_secret",
                      "server_metadata_url")
     if any(not str(auth_config.get(key, "")).strip() for key in required_auth):
@@ -84,12 +126,8 @@ def _current_user():
         st.info("Configure the [auth] and [smartfind] sections using the setup instructions in README.md.")
         st.stop()
 
-    if not st.user.is_logged_in:
-        st.markdown('<div class="page-title">SmartFind sign in</div>', unsafe_allow_html=True)
-        st.caption("Use your verified campus account to submit reports and view your match notifications.")
-        st.button("Continue with Google", on_click=st.login, type="primary")
-        st.stop()
-
+    st.session_state.pop("guest_account_id", None)
+    st.session_state.pop("guest_recovery_code", None)
     email = str(st.user.get("email", "")).strip().casefold()
     role = resolve_role(email, st.user.get("email_verified", False),
                         app_config.get("student_email_domains", []),
@@ -98,7 +136,7 @@ def _current_user():
         st.error("This verified account is not authorized to use SmartFind.")
         st.button("Sign out", on_click=st.logout)
         st.stop()
-    return {"email": email, "name": st.user.get("name") or email, "role": role,
+    return {"email": email, "name": st.user.get("name") or email, "role": role, "is_guest": False,
             "supabase_database_url": supabase_config.get("database_url", "")}
 
 
@@ -259,6 +297,8 @@ st.session_state.id_counter = max(
 
 def deliver_pending_notification_emails():
     """Deliver queued email without recalculating every report pair."""
+    if current_user["is_guest"]:
+        return
     fail_stuck_notification_emails()
     if not is_configured(mail_config):
         return
@@ -280,7 +320,8 @@ def auto_monitor_and_notify():
     notifications = new_notifications(
         st.session_state.reports, notification_keys(), datetime.now().strftime("%b %d, %I:%M %p"))
     save_notifications(notifications)
-    deliver_pending_notification_emails()
+    if not current_user["is_guest"]:
+        deliver_pending_notification_emails()
     st.session_state.notifications = load_notifications(current_user["email"])
 
 
@@ -569,8 +610,27 @@ with st.sidebar:
         label = f"{icon}   {name} ({unread_count})" if name == "Notifications" and unread_count else f"{icon}   {name}"
         if st.button(label, key=f"nav_{i}", **STRETCH):
             navigate(name)
-    st.caption(f"{current_user['name']} · {current_user['role'].title()}")
-    st.button("Sign out", on_click=st.logout, **STRETCH)
+    role_label = "Guest" if current_user["is_guest"] else current_user["role"].title()
+    st.caption(f"{current_user['name']} · {role_label}")
+    if current_user["is_guest"] and st.session_state.get("guest_recovery_code"):
+        with st.expander("Save guest recovery code", expanded=True):
+            st.warning("Save this code privately. It is shown only once and is required to return to this guest account.")
+            st.code(st.session_state.guest_recovery_code)
+            if st.button("I've saved my code", key="guest_code_saved", **STRETCH):
+                st.session_state.pop("guest_recovery_code", None)
+                st.rerun()
+
+    def sign_out():
+        if current_user["is_guest"]:
+            st.session_state.pop("guest_account_id", None)
+            st.session_state.pop("guest_recovery_code", None)
+            st.session_state.pop("guest_recovery_input", None)
+            st.session_state.page = "Home"
+            st.rerun()
+        else:
+            st.logout()
+
+    st.button("Sign out", on_click=sign_out, **STRETCH)
     html("""
     <div style="margin-top:60px;background:rgba(255,255,255,.05);padding:10px 12px;border-radius:8px;
     border:1px solid rgba(255,255,255,.1)">
@@ -584,7 +644,7 @@ html(f"""
   <div style="display:flex;align-items:center;gap:10px">
     <div class="user-avatar">{esc(current_user['name'][:1].upper())}</div>
     <div class="user-name"><div style="color:#2d3748;font-size:12px;font-weight:700">{esc(current_user['name'])}</div>
-    <div style="color:#a0aec0;font-size:10px">{current_user['role'].title()}</div></div>
+    <div style="color:#a0aec0;font-size:10px">{role_label}</div></div>
   </div>
 </div>
 """)
@@ -823,7 +883,8 @@ with body:
                 dt = st.date_input(f"Date {verb} *", value=date.today(), max_value=date.today())
                 desc = st.text_area("Description (optional)",
                                     placeholder="Brand, case, stickers, scratches or other distinguishing features")
-                st.caption(f"Report owner: {current_user['email']}")
+                owner_label = "Guest account" if current_user["is_guest"] else current_user["email"]
+                st.caption(f"Report owner: {owner_label}")
                 submit = st.form_submit_button(f"Submit {verb} report", **STRETCH_SUBMIT)
 
             if submit:
@@ -1023,7 +1084,9 @@ with body:
             with st.container(key=f"card_notification_{notification['id']}"):
                 state_label = "Unread" if notification["read_at"] is None else "Read"
                 email_status = notification.get("email_status", "pending")
-                if email_status == "sent":
+                if current_user["is_guest"] or email_status == "not_applicable":
+                    email_label = "In-app only"
+                elif email_status == "sent":
                     email_label = "Email sent"
                 elif email_status == "failed":
                     email_label = "Email failed"

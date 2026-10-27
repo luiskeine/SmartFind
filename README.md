@@ -15,7 +15,9 @@ Open the local URL printed by Streamlit (normally `http://localhost:8501`) in a 
 
 ## Sign-in and roles
 
-SmartFind uses Streamlit's Google OIDC sign-in. Authentication identifies the person; SmartFind then grants the `student` role only to verified emails in `student_email_domains`, and the `admin` role only to exact addresses in `admin_emails`. Admin addresses must also be verified. Students see found reports and their own lost reports; admins can manage all records. Reports use the signed-in email, never a user-entered contact address.
+SmartFind supports Google OIDC sign-in and anonymous guest accounts. Verified emails in `student_email_domains` receive the `student` role, and verified addresses explicitly listed in `admin_emails` receive the `admin` role. Students and guests can submit reports, see found reports and their own lost reports, and receive in-app match notifications; admins can manage all records. Guest accounts cannot access admin features and do not receive email notifications.
+
+Choose **Continue as guest** to create a persistent guest account. SmartFind generates a high-entropy recovery code; save it privately because it is shown only once and is required to resume that account on another visit or device. The database stores a digest of the code, not the code itself. Anyone with the recovery code can access that guest account, and a lost code cannot be recovered. Guest data remains in the database until an administrator deletes it from Supabase. A configured Supabase database is still required. Google sign-in and its `[auth]` settings remain necessary for verified student/admin accounts; they are optional for guests.
 
 Create `.streamlit/secrets.toml` for local use. This file is git-ignored; never commit real credentials. Register both the local and deployed callback URLs in the Google OAuth client. In Streamlit Community Cloud, paste the same settings into the app's **Secrets** settings, changing `redirect_uri` to the deployed URL:
 
@@ -40,7 +42,7 @@ from_email = "your-sender@gmail.com"
 app_url = "https://<your-app-subdomain>.streamlit.app"
 ```
 
-For the hosted app, set `redirect_uri` to `https://<your-app-subdomain>.streamlit.app/oauth2callback` and add that exact callback URL to the Google OAuth client's authorized redirect URIs. Add every authorized admin's exact email to `admin_emails`. If your campus uses another identity provider/domain, configure its OIDC metadata URL and email domain instead. Until these secrets are present, the app intentionally blocks access.
+For the hosted app, set `redirect_uri` to `https://<your-app-subdomain>.streamlit.app/oauth2callback` and add that exact callback URL to the Google OAuth client's authorized redirect URIs. Add every authorized admin's exact email to `admin_emails`. If your campus uses another identity provider/domain, configure its OIDC metadata URL and email domain instead. Without OIDC settings, verified-account sign-in is unavailable, but guests can still use the app when Supabase is configured.
 
 ## Supabase database
 

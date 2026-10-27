@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import smartfind_mail
 import smartfind_vision
 import smartfind_store
-from smartfind_auth import resolve_role
+from smartfind_auth import create_guest_credentials, guest_code_digest, resolve_role
 from smartfind_core import (NOTIFY_THRESHOLD, calculate_match_score, compare_locations,
                             find_pairs, new_notifications, normalize_location)
 
@@ -528,6 +528,8 @@ class ReportStoreTests(unittest.TestCase):
                 self.assertEqual(len(connections), 1)
                 ddl = connections[0].statements
                 self.assertTrue(any("CREATE TABLE" in statement for statement in ddl))
+                self.assertTrue(any("CREATE TABLE IF NOT EXISTS guest_accounts" in statement
+                                    for statement in ddl))
                 self.assertTrue(any("ENABLE ROW LEVEL SECURITY" in statement for statement in ddl))
                 with smartfind_store._connect() as connection:
                     connection.execute("SELECT payload::text FROM reports")
@@ -538,12 +540,79 @@ class ReportStoreTests(unittest.TestCase):
             smartfind_store._INITIALIZED_TARGETS.clear()
             smartfind_store._INITIALIZED_TARGETS.update(old_initialized)
 
+    def test_guest_accounts_store_and_lookup_only_recovery_code_digests(self):
+        guest_id = "guest-identity"
+        code_hash = "a" * 64
+
+        class FakeCursor:
+            def __init__(self, row=None):
+                self.row = row
+
+            def fetchone(self):
+                return self.row
+
+        class FakeConnection:
+            def __init__(self):
+                self.statements = []
+
+            def execute(self, statement, params=None):
+                self.statements.append((statement, params))
+                return FakeCursor((guest_id,))
+
+        connection = FakeConnection()
+        with patch.object(smartfind_store, "_connect", return_value=nullcontext(connection)):
+            smartfind_store.create_guest_account(guest_id, code_hash)
+            self.assertEqual(smartfind_store.find_guest_account(code_hash), guest_id)
+
+        self.assertIn("INSERT INTO guest_accounts", connection.statements[0][0])
+        self.assertEqual(connection.statements[0][1], (guest_id, code_hash))
+        self.assertIn("WHERE recovery_code_hash = %s", connection.statements[1][0])
+        self.assertEqual(connection.statements[1][1], (code_hash,))
+
+    def test_guest_notifications_are_in_app_only(self):
+        class FakeCursor:
+            rowcount = 1
+
+            def fetchall(self):
+                return []
+
+        class FakeConnection:
+            def __init__(self):
+                self.statements = []
+
+            def execute(self, statement, params=None):
+                self.statements.append((statement, params))
+                return FakeCursor()
+
+        connection = FakeConnection()
+        with patch.object(smartfind_store, "_connect", return_value=nullcontext(connection)):
+            smartfind_store.save_notifications([
+                {"key": "guest-key", "pair_key": "L1_F1", "recipient": "guest:123",
+                 "item": "Black Smartphone", "score": 100, "time": "now"},
+                {"key": "student-key", "pair_key": "L2_F2", "recipient": "student@example.com",
+                 "item": "Blue Keys", "score": 90, "time": "now"},
+            ])
+            smartfind_store.pending_notification_emails()
+
+        self.assertEqual(connection.statements[0][1][-1], "not_applicable")
+        self.assertEqual(connection.statements[1][1][-1], "pending")
+        self.assertIn("recipient NOT LIKE 'guest:%'", connection.statements[2][0])
+
+
 class AuthenticationTests(unittest.TestCase):
     def test_only_verified_allowlisted_identities_receive_roles(self):
         self.assertEqual(resolve_role("Student@TIP.edu.ph", True, ["tip.edu.ph"], []), "student")
         self.assertEqual(resolve_role("admin@example.com", True, [], ["ADMIN@example.com"]), "admin")
         self.assertIsNone(resolve_role("user@other.edu", True, ["tip.edu.ph"], []))
         self.assertIsNone(resolve_role("user@tip.edu.ph", False, ["tip.edu.ph"], []))
+
+    def test_guest_recovery_code_is_high_entropy_and_only_a_digest_is_returned(self):
+        guest_id, recovery_code, code_hash = create_guest_credentials()
+
+        self.assertEqual(len(guest_id), 32)
+        self.assertEqual(guest_code_digest(recovery_code), code_hash)
+        self.assertNotEqual(recovery_code, code_hash)
+        self.assertIsNone(guest_code_digest("not-a-valid-code"))
 
 
 class MobileNavigationTests(unittest.TestCase):
