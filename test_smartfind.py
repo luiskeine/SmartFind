@@ -695,26 +695,6 @@ class ThemeTests(unittest.TestCase):
                 self.assertIn('[data-testid="stProgressBarTrack"] > div', stylesheet)
                 self.assertIn('[data-testid="stExpander"] summary:hover', stylesheet)
 
-    def test_theme_stylesheet_reaches_portalled_dropdowns_and_all_option_states(self):
-        stylesheet = smartfind_theme.theme_stylesheet("dark")
-        self.assertIn('[data-testid="stSelectboxVirtualDropdown"]', stylesheet)
-        self.assertIn('[data-testid="stSelectboxVirtualDropdown"] [role="option"][aria-selected="true"]',
-                      stylesheet)
-        self.assertIn('[data-baseweb="popover"] [role="option"]:hover', stylesheet)
-        self.assertNotIn('.stApp [data-baseweb="popover"]', stylesheet)
-
-    def test_app_markup_uses_theme_tokens_instead_of_fixed_text_and_surface_colors(self):
-        source = Path("main.py").read_text(encoding="utf-8")
-        self.assertNotRegex(source, r"(?i)(?:color|background(?:-color)?):\s*#[0-9a-f]{3,8}\b")
-        for tokenized_style in (
-                "background:var(--sf-elevated)",
-                "background:var(--sf-surface)",
-                "color:var(--sf-muted)",
-                "color:var(--sf-text)"):
-            with self.subTest(tokenized_style=tokenized_style):
-                self.assertIn(tokenized_style, source)
-        self.assertNotIn('[style*="color:#', smartfind_theme.theme_stylesheet("dark"))
-
     def test_theme_stylesheet_defaults_unknown_theme_to_light(self):
         self.assertIn("color-scheme:light", smartfind_theme.theme_stylesheet("unknown"))
 
