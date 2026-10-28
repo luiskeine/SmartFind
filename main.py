@@ -21,8 +21,9 @@ from html import escape as _esc
 
 import streamlit as st
 
-from smartfind_core import (MATCH_THRESHOLD, NOTIFY_THRESHOLD, calculate_match_score,  # noqa: F401
-                            find_pairs, new_notifications)
+from smartfind_core import (CUSTODY_HOLDERS, MATCH_THRESHOLD, NOTIFY_THRESHOLD,
+                            calculate_match_score, can_update_custody, ensure_custody,  # noqa: F401
+                            find_pairs, new_notifications, transfer_custody)
 from smartfind_auth import create_guest_credentials, guest_code_digest, resolve_role
 from smartfind_vision import (MODEL_LABELS, MODEL_PATHS, TRAINED_CATEGORIES,
                               brands_for_category, classify_image, normalize_brand,
@@ -415,7 +416,15 @@ def render_report_wizard(report_type):
                      'style="width:140px;height:140px;object-fit:cover;border-radius:12px">')
             if suggestion:
                 detected = suggestion.get("category") or "No supported item detected"
-                st.caption(f"Suggestion: {detected}. Confirm or change suggestions in the next step.")
+                confidence = suggestion.get("confidence")
+                confidence_label = f" · detection confidence {confidence:.0f}%" if confidence is not None else ""
+                analysis_source = str(suggestion.get("source") or "manual fallback")
+                st.caption(f"Suggestion: {detected}{confidence_label}. "
+                           f"Analysis: {analysis_source.replace('_', ' ')}. "
+                           "Confirm or change suggestions in the next step.")
+                candidates = suggestion.get("brand_candidates") or []
+                if candidates:
+                    st.caption("Visible-text candidates: " + " · ".join(map(str, candidates[:4])))
 
             if st.button("Continue to details", type="primary", key=f"photo_next_{report_type}"):
                 persist_report_draft(report_type, {
@@ -528,6 +537,9 @@ def render_report_wizard(report_type):
             st.write(f"**Color:** {draft.get('color') or '—'}")
             st.write(f"**Location:** {draft.get('location') or '—'}")
             st.write(f"**Date:** {draft.get('date') or '—'}")
+            if report_type == "Found":
+                st.write("**Current holder:** Finder")
+                st.caption("After submitting, you can transfer the item to OSA from the report details.")
             st.write(f"**Description:** {draft.get('description') or '—'}")
             if draft.get("photo"):
                 html(f'<img src="{draft["photo"]}" alt="Attached report photo" '
@@ -553,6 +565,8 @@ def render_report_wizard(report_type):
                     "status": "Searching" if is_lost else "Reported",
                     "user_email": current_user["email"],
                 }
+                if report_type == "Found":
+                    ensure_custody(report)
                 st.session_state.reports.append(report)
                 save_report(report)
                 remove_report_draft(report_type)
@@ -589,9 +603,12 @@ def refresh_session_data(owner_email):
     for report in reports:
         stored_brand = report.get("brand", "")
         stored_category = report.get("category", "")
+        before_custody = (report.get("holder"), report.get("holder_history"))
         report["brand"] = normalize_brand(stored_brand)
         report["category"] = normalize_category(stored_category)
-        if report["brand"] != stored_brand or report["category"] != stored_category:
+        ensure_custody(report)
+        if (report["brand"] != stored_brand or report["category"] != stored_category
+                or before_custody != (report.get("holder"), report.get("holder_history"))):
             save_report(report)
     st.session_state.reports = reports
     st.session_state.id_counter = max(
@@ -910,7 +927,39 @@ def show_details(rid):
     Category: <strong>{esc(r['category'])}</strong><br>Brand: <strong>{esc(r.get('brand', '')) or '—'}</strong><br>
     Color: <strong>{esc(r['color']) or '—'}</strong><br>
     Location: <strong>{esc(r['location'])}</strong><br>Date: <strong>{fmt_date(r['date'])}</strong><br>
-    Status: <strong>{r['status']}</strong><br>Description: {esc(r['description']) or '—'}</div></div></div>""")
+    Status: <strong>{r['status']}</strong><br>
+    {'Current holder: <strong>' + esc(r.get("holder", "Finder") if r['type'] == 'Found' else r['type']) + '</strong><br>' if r['type'] == 'Found' else ''}
+    Description: {esc(r['description']) or '—'}</div></div></div>""")
+    ensure_custody(r)
+    if r['type'] == 'Found' and can_update_custody(r, current_user):
+        st.caption("The current holder is the person or facility physically keeping this found item.")
+        holder_key = f"holder_{rid}"
+        selected_holder = st.selectbox("Current holder", CUSTODY_HOLDERS,
+                                       index=CUSTODY_HOLDERS.index(r['holder']), key=holder_key)
+        if st.button("Update current holder", key=f"update_holder_{rid}", **STRETCH):
+            if transfer_custody(r, selected_holder, current_user["email"],
+                                datetime.now().isoformat(timespec="seconds")):
+                save_report(r)
+                st.session_state.flash = ("success", f"Current holder updated to {selected_holder}.")
+            st.rerun()
+        history = r.get("holder_history", [])
+        if history:
+            st.markdown("**Custody history**")
+            for entry in reversed(history):
+                label = entry.get("holder", "Finder")
+                actor = entry.get("actor", "Unknown")
+                time = entry.get("time", "Unknown time")
+                st.caption(f"• {esc(label)} — {esc(actor)} · {esc(time)}")
+    can_manage_report = (r.get("user_email", "").casefold() == current_user["email"]
+                         or current_user["role"] == "admin")
+    if can_manage_report and r["status"] != "Resolved":
+        st.divider()
+        if st.button("Mark this report resolved", key=f"resolve_report_{rid}", **STRETCH):
+            r["status"] = "Resolved"
+            save_report(r)
+            auto_monitor_and_notify()
+            st.session_state.flash = ("success", f"Report {rid} marked resolved.")
+            st.rerun()
 
 
 # ============================================================
@@ -963,6 +1012,8 @@ html(f"""
 """)
 if st.session_state.pop("data_refresh_message", False):
     st.success("Reports and notifications refreshed.")
+if flash := st.session_state.pop("flash", None):
+    getattr(st, flash[0])(flash[1])
 
 body = st.container(key="body_pad")
 
@@ -1122,7 +1173,8 @@ with body:
             <div><span class="lbl">Color: </span>{esc(r['color']) or '—'}</div>
             <div><span class="lbl">Location: </span>{esc(r['location'])}</div>
             <div><span class="lbl">Date: </span>{fmt_date(r['date'])}</div>
-            <div>{type_pill(r)}<div class="rid">{r['status']}</div></div>
+            <div>{type_pill(r)}<div class="rid">{r['status']}</div>
+            {'<div class="rid">Held by: ' + esc(r.get("holder", "Finder") if r['type'] == 'Found' else '') + '</div>' if r['type'] == 'Found' else ''}</div>
             <div class="rec-more">View details ▾</div></summary>
             <div class="rec-detail">{thumb(r, 96)}<div>
             <strong style="font-size:14px;color:#1a202c">{esc(r['item'])}</strong><br>
@@ -1151,7 +1203,14 @@ with body:
         html("""<div class="eyebrow">SMARTFIND MATCHING AGENT</div><div class="page-title">Possible Matches</div>
         <div class="page-sub">SmartFind compares lost and found reports automatically. The similarity score (out of 100) shows how
         alike the report details are. It is <strong>not a probability and not proof of ownership</strong>,
-        and it is separate from any photo-recognition confidence.</div>""")
+        and it is separate from any photo-recognition confidence.</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 18px">
+          <span class="pill pill-found"><strong>Strong ≥ 75</strong> · inbox notice</span>
+          <span class="pill pill-lost"><strong>Weak 40–74</strong> · context only</span>
+        </div>
+        <div style="font-size:12px;color:#52657a;margin-bottom:14px">
+          Strongest and weakest factors below explain the score; campus staff still verify ownership.
+        </div>""")
 
         pairs = current_pairs()
         if current_user["role"] != "admin":
@@ -1170,7 +1229,9 @@ with body:
             <div style="font-size:12px;color:#4a5568;line-height:1.8">Category: <strong>{esc(r['category'])}</strong><br>
             Brand: <strong>{esc(r.get('brand', '')) or '—'}</strong><br>
             Color: <strong>{esc(r['color']) or '—'}</strong><br>Location: <strong>{esc(r['location'])}</strong><br>
-            Date: <strong>{fmt_date(r['date'])}</strong></div></div>"""
+            Date: <strong>{fmt_date(r['date'])}</strong>
+            {'<br>Current holder: <strong>' + esc(r.get("holder", "Finder")) + '</strong>' if r['type'] == 'Found' else ''}
+            </div></div>"""
 
         ICON = {"match": ("✓", "#2f855a"), "partial": ("◐", "#dd6b20"),
                 "differ": ("✗", "#c53030"), "unverified": ("?", "#a0aec0")}
@@ -1178,6 +1239,13 @@ with body:
         for s, lo, fo, rows in pairs:
             label = "Strong possible match" if s >= NOTIFY_THRESHOLD else "Weak possible match"
             checks = ""
+            ranked_rows = sorted(rows, key=lambda row: row["pts"], reverse=True)
+            strongest = ranked_rows[0]
+            weakest = min(rows, key=lambda row: row["pts"])
+            summary = (f'<div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;'
+                       f'margin-bottom:10px;font-size:12px"><strong>Why this score:</strong> '
+                       f'{esc(strongest["rule"])} contributed the most; '
+                       f'{esc(weakest["rule"])} contributed the least.</div>')
             for x in rows:
                 ic, col = ICON[x["state"]]
                 checks += (f'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 0;'
@@ -1211,7 +1279,7 @@ with body:
                   </div>
                   <div style="flex:1;padding:18px 22px;background:#fff">
                     <div style="font-size:11px;font-weight:800;color:#2a9d8f">WHY THIS WAS MATCHED</div>
-                    <div style="font-size:17px;margin-bottom:6px">Comparison breakdown</div>{checks}
+                    <div style="font-size:17px;margin-bottom:6px">Comparison breakdown</div>{summary}{checks}
                     <div style="font-size:10px;color:#a0aec0;margin-top:8px">✓ matches · ◐ partly matches · ✗ differs · ? not provided, so it earns no points</div>
                   </div>
                 </div>
@@ -1232,6 +1300,13 @@ with body:
         <div class="page-title">Notifications</div>
         <div class="page-sub">Strong possible matches for your reports. Inbox notices always appear here; email delivery status is shown on each notice.</div>""")
         notifications = st.session_state.notifications
+        notification_filter = st.segmented_control(
+            "Show", options=["All", "Unread", "Read"], default="All",
+            selection_mode="single", key="notification_filter") if hasattr(st, "segmented_control") else None
+        if notification_filter:
+            notifications = [notification for notification in notifications
+                             if notification_filter == "All"
+                             or (notification_filter == "Unread") == (notification["read_at"] is None)]
         unread_count = sum(notification["read_at"] is None for notification in notifications)
         header_left, header_right = st.columns([3, 1])
         header_left.caption(f"{len(notifications)} notifications · {unread_count} unread")
@@ -1328,8 +1403,16 @@ with body:
             new_status = st.selectbox("Status", statuses,
                                       index=statuses.index(r["status"]) if r["status"] in statuses else 0)
             new_loc = st.text_input("Location", value=r["location"])
+            ensure_custody(r)
+            new_holder = r["holder"]
+            if r["type"] == "Found":
+                new_holder = st.selectbox("Current holder", CUSTODY_HOLDERS,
+                                          index=CUSTODY_HOLDERS.index(r["holder"]))
             if st.button("Save changes", **STRETCH):
                 r["status"], r["location"] = new_status, new_loc.strip() or r["location"]
+                if r["type"] == "Found":
+                    transfer_custody(r, new_holder, current_user["email"],
+                                     datetime.now().isoformat(timespec="seconds"))
                 save_report(r)
                 auto_monitor_and_notify()
                 st.rerun()

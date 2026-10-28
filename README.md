@@ -91,6 +91,20 @@ The included `Dockerfile` builds a browser-accessible container. Build and run i
 
 YOLO category detection is not instance-level image matching: two objects of the same category are not visually proven to be the same object. The V1 and V2 checkpoints are selected per signed-in Streamlit session. Their labels are normalized into one shared category vocabulary (for example, `Smartphone` and `Mobile phone` both become `Mobile phone`) so reports from different model versions can still match. Category choices include the combined 24 labels; a given model can only detect classes it was trained to recognize. Color estimation is a basic pixel heuristic and can be affected by lighting/backgrounds; in no-detection fallback it samples the image center. OCR may miss stylized text and does not recognize logo graphics. With no detected category, OCR checks the whole photo against the combined brand shortlist, which may increase false positives; the user must confirm any suggested brand.
 
+## Found-item custody and handoff demo
+
+Each found report begins with **Finder** as the current holder. The student/person who submitted the report, or an authorized admin, can transfer custody to **OSA** after handing the item to the Office of Student Affairs. The control is available from the report details; admins can also update it in **Admin Management**.
+
+Every successful custody change adds to a short history showing the new holder, the account that made the change, and the timestamp. Returning custody to **Finder** is also allowed. Custody does not affect matching scores or notifications: it is a current-location/status aid for the lost-and-found process, not proof that a report belongs to a specific person.
+
+For a five-minute demonstration:
+
+1. Submit a Found report as a guest or signed-in student.
+2. Open **Lost & Found Records**, select the report, and confirm that it is held by **Finder**.
+3. Open the details and change **Current holder** to **OSA**.
+4. Show the updated Records/details label and the custody-history entry.
+5. If desired, demonstrate an authorized admin changing the holder back to **Finder** and explaining that only the report owner or admin can make this update.
+
 ## Data, tests, and current limitations
 
 - Supabase projects start empty; there are no local demo records or SQLite migration path.

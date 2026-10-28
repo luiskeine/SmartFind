@@ -1,0 +1,102 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run baseline tests",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"-m",
+				"pytest",
+				"test_smartfind.py",
+				"-ra"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Run baseline unittest suite",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"test_smartfind.py"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Run requested SmartFind unittest classes",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"-v",
+				"test_smartfind.CustodyTests",
+				"test_smartfind.ScoreTests",
+				"test_smartfind.DataRefreshTests",
+				"test_smartfind.AuthenticationTests"
+			],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Run unittest suite",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"-v"
+			]
+		},
+		{
+			"label": "Final unittest validation",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"-v"
+			],
+			"isBackground": true
+		},
+		{
+			"label": "Extract unittest summary",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"-v"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Unittest final summary",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe -m unittest -v 2>&1 | Select-Object -Last 25",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Run SmartFind unittest suite",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"-m",
+				"unittest",
+				"-v"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Get SmartFind unittest summary",
+			"type": "shell",
+			"command": "python -m unittest -v 2>&1 | Select-Object -Last 20",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

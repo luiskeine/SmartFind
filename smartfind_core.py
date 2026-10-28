@@ -12,6 +12,7 @@ from difflib import SequenceMatcher
 
 MATCH_THRESHOLD = 40   # minimum score listed on the Possible Matches page
 NOTIFY_THRESHOLD = 75  # minimum score that creates a (simulated, in-app) notification
+CUSTODY_HOLDERS = ("Finder", "OSA")
 
 # ------------------------------------------------------------------
 # Campus areas. EXAMPLES ONLY — edit to match your campus.
@@ -187,6 +188,55 @@ def calculate_match_score(lost, found):
         else:
             add("Description", "Different descriptions", "Differs", 0, "differ")
     return score, rows
+
+
+def ensure_custody(report):
+    """Add a backward-compatible custody state and initial history entry."""
+    if report.get("type") != "Found":
+        return report
+    holder = str(report.get("holder") or "").strip()
+    if holder not in CUSTODY_HOLDERS:
+        holder = "Finder"
+    history = report.get("holder_history")
+    if not isinstance(history, list):
+        history = []
+    if not history:
+        history = [{
+            "holder": holder,
+            "actor": str(report.get("user_email") or "Unknown").strip(),
+            "time": str(report.get("date") or "Legacy report"),
+            "initial": True,
+        }]
+    report["holder"] = holder
+    report["holder_history"] = history
+    return report
+
+
+def can_update_custody(report, current_user):
+    """Return whether the current account may update a found report's holder."""
+    if report.get("type") != "Found":
+        return False
+    if current_user.get("role") == "admin":
+        return True
+    return str(report.get("user_email") or "").strip().casefold() == str(
+        current_user.get("email") or "").strip().casefold()
+
+
+def transfer_custody(report, holder, actor, timestamp):
+    """Update custody and append an auditable transfer entry."""
+    ensure_custody(report)
+    holder = str(holder).strip()
+    if holder not in CUSTODY_HOLDERS:
+        raise ValueError("Current holder must be Finder or OSA")
+    if report["holder"] == holder:
+        return False
+    report["holder"] = holder
+    report["holder_history"].append({
+        "holder": holder,
+        "actor": str(actor).strip(),
+        "time": str(timestamp).strip(),
+    })
+    return True
 
 
 def find_pairs(reports, min_score=MATCH_THRESHOLD):

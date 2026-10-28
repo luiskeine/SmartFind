@@ -12,8 +12,10 @@ import smartfind_vision
 import smartfind_store
 import smartfind_theme
 from smartfind_auth import create_guest_credentials, guest_code_digest, resolve_role
-from smartfind_core import (NOTIFY_THRESHOLD, calculate_match_score, compare_locations,
-                            find_pairs, new_notifications, normalize_location)
+from smartfind_core import (CUSTODY_HOLDERS, NOTIFY_THRESHOLD, calculate_match_score,
+                            can_update_custody, compare_locations, ensure_custody,
+                            find_pairs, new_notifications, normalize_location,
+                            transfer_custody)
 
 
 def report(rid, rtype, **kw):
@@ -640,6 +642,51 @@ class ReportStoreTests(unittest.TestCase):
         self.assertEqual(connection.statements[0][1][-1], "not_applicable")
         self.assertEqual(connection.statements[1][1][-1], "pending")
         self.assertIn("recipient NOT LIKE 'guest:%'", connection.statements[2][0])
+
+
+class CustodyTests(unittest.TestCase):
+    def test_found_report_defaults_to_finder_with_initial_history(self):
+        found = ensure_custody(report("F1", "Found", user_email="finder@example.com"))
+        self.assertEqual(found["holder"], "Finder")
+        self.assertEqual(found["holder_history"][0]["holder"], "Finder")
+        self.assertEqual(found["holder_history"][0]["actor"], "finder@example.com")
+
+    def test_lost_report_does_not_gain_custody(self):
+        lost = ensure_custody(report("L1", "Lost"))
+        self.assertNotIn("holder", lost)
+        self.assertNotIn("holder_history", lost)
+
+    def test_custody_transfer_records_holder_actor_and_time(self):
+        found = ensure_custody(report("F1", "Found", user_email="finder@example.com"))
+        changed = transfer_custody(found, "OSA", "finder@example.com", "2026-10-28 12:30")
+        self.assertTrue(changed)
+        self.assertEqual(found["holder"], "OSA")
+        self.assertEqual(found["holder_history"][-1], {
+            "holder": "OSA", "actor": "finder@example.com", "time": "2026-10-28 12:30"})
+        self.assertFalse(transfer_custody(found, "OSA", "finder@example.com", "later"))
+
+    def test_legacy_invalid_holder_is_normalized_to_finder(self):
+        found = ensure_custody(report("F1", "Found", holder="Unknown", holder_history=[]))
+        self.assertEqual(found["holder"], "Finder")
+
+    def test_only_owner_or_admin_can_update_custody(self):
+        found = ensure_custody(report("F1", "Found", user_email="finder@example.com"))
+        self.assertTrue(can_update_custody(found, {"email": "finder@example.com", "role": "student"}))
+        self.assertTrue(can_update_custody(found, {"email": "admin@example.com", "role": "admin"}))
+        self.assertFalse(can_update_custody(found, {"email": "other@example.com", "role": "student"}))
+        self.assertEqual(tuple(CUSTODY_HOLDERS), ("Finder", "OSA"))
+
+    def test_invalid_custody_target_is_rejected(self):
+        found = ensure_custody(report("F1", "Found"))
+        with self.assertRaisesRegex(ValueError, "Finder or OSA"):
+            transfer_custody(found, "Locker", "admin@example.com", "now")
+
+    def test_custody_controls_are_present_on_details_and_admin_update(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        self.assertIn('st.selectbox("Current holder", CUSTODY_HOLDERS', source)
+        self.assertIn("Custody history", source)
+        self.assertIn("transfer_custody(r, selected_holder", source)
+        self.assertIn('"Update current holder"', source)
 
 
 class AuthenticationTests(unittest.TestCase):
