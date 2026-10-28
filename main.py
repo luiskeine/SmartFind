@@ -261,6 +261,7 @@ PAGES = [
     ("Home", "⌂"),
     ("Report Lost Item", "ⓘ"),
     ("Report Found Item", "⌕"),
+    ("My Reports", "▣"),
     ("Lost & Found Records", "▤"),
     ("Possible Matches", "⛓"),
     ("Notifications", "🔔"),
@@ -297,8 +298,15 @@ def request_data_refresh():
 
 def navigate(page):
     st.session_state.page = page
-    st.session_state.refresh_data_on_next_run = True
     st.rerun()
+
+
+def render_page_refresh():
+    left, right = st.columns([5, 1])
+    with right:
+        if st.button("↻ Refresh data", key=f"refresh_{active}", **STRETCH):
+            request_data_refresh()
+    return left
 
 
 def next_id():
@@ -619,13 +627,19 @@ def refresh_session_data(owner_email):
     st.session_state.notifications_loaded_for = owner_email
 
 
+active = st.session_state.page
+DATA_PAGES = ("Lost & Found Records", "Possible Matches", "Notifications")
 refresh_requested = st.session_state.pop("refresh_data_on_next_run", False)
 manual_refresh_requested = st.session_state.pop("manual_data_refresh_requested", False)
-if (refresh_requested or not st.session_state.get("reports_loaded", False)
+entered_data_page = (active in DATA_PAGES
+                     and st.session_state.get("last_data_page") != active)
+if (refresh_requested or entered_data_page or not st.session_state.get("reports_loaded", False)
         or st.session_state.get("notifications_loaded_for") != current_user["email"]):
     refresh_session_data(current_user["email"])
     if manual_refresh_requested:
         st.session_state.data_refresh_message = True
+if active in DATA_PAGES:
+    st.session_state.last_data_page = active
 
 # ============================================================
 # AGENT 1 — PERCEIVE: see smartfind_vision.py (YOLO detection, crop analysis, optional OCR)
@@ -904,8 +918,6 @@ with st.container(key="mobile_nav"):
         st.caption("Navigate SmartFind")
         st.toggle("Dark theme", key="mobile_theme_dark",
                   on_change=update_theme_preference, args=("mobile_theme_dark",))
-        if st.button("↻ Refresh data", key="mobile_refresh_data", **STRETCH):
-            request_data_refresh()
         for i, (name, icon) in enumerate(PAGES):
             if st.button(f"{icon}  {name}", key=f"mobile_nav_{i}", **STRETCH):
                 navigate(name)
@@ -978,8 +990,6 @@ with st.sidebar:
         label = f"{icon}   {name} ({unread_count})" if name == "Notifications" and unread_count else f"{icon}   {name}"
         if st.button(label, key=f"nav_{i}", **STRETCH):
             navigate(name)
-    if st.button("↻ Refresh data", key="refresh_data", **STRETCH):
-        request_data_refresh()
     st.toggle("Dark theme", key="theme_dark",
               on_change=update_theme_preference, args=("theme_dark",))
     role_label = "Guest" if current_user["is_guest"] else current_user["role"].title()
@@ -1119,11 +1129,86 @@ with body:
         render_report_wizard("Lost" if active == "Report Lost Item" else "Found")
 
     # ========================================================
+    # MY REPORTS
+    # ========================================================
+    elif active == "My Reports":
+        html("""<div class="eyebrow">YOUR SUBMISSIONS</div><div class="page-title">My Reports</div>
+        <div class="page-sub">Review, resolve, and manage the Lost and Found reports submitted by this account.</div>""")
+
+        @st.dialog("Manage your report")
+        def manage_my_report(rid):
+            r = get_report(rid)
+            if not r:
+                st.warning("This report no longer exists.")
+                return
+            st.caption(f"{r['id']} — {r['item']}")
+            statuses = ["Searching", "Resolved"] if r["type"] == "Lost" else ["Reported", "Resolved"]
+            status = st.selectbox("Status", statuses,
+                                  index=statuses.index(r["status"])
+                                  if r["status"] in statuses else 0,
+                                  key=f"my_status_{rid}")
+            location = st.text_input("Location", value=r["location"], key=f"my_location_{rid}")
+            ensure_custody(r)
+            holder = r.get("holder", "Finder")
+            if r["type"] == "Found":
+                st.caption("Current holder indicates who is physically keeping the item—not proof of ownership.")
+                holder = st.selectbox("Current holder", CUSTODY_HOLDERS,
+                                      index=CUSTODY_HOLDERS.index(holder), key=f"my_holder_{rid}")
+            if st.button("Save changes", type="primary", key=f"my_save_{rid}", **STRETCH):
+                r["status"] = status
+                r["location"] = location.strip() or r["location"]
+                if r["type"] == "Found":
+                    transfer_custody(r, holder, current_user["email"],
+                                     datetime.now().isoformat(timespec="seconds"))
+                save_report(r)
+                auto_monitor_and_notify()
+                st.session_state.flash = ("success", f"Report {rid} updated.")
+                st.rerun()
+
+            history = r.get("holder_history", [])
+            if r["type"] == "Found" and history:
+                st.markdown("**Custody history**")
+                for entry in reversed(history):
+                    st.caption(f"• {esc(entry.get('holder', 'Finder'))} — "
+                               f"{esc(entry.get('actor', 'Unknown'))} · "
+                               f"{esc(entry.get('time', 'Unknown time'))}")
+
+            st.divider()
+            confirm_delete = st.checkbox("I understand this will permanently remove this report", key=f"my_delete_confirm_{rid}")
+            if st.button("Delete report", key=f"my_delete_{rid}", disabled=not confirm_delete, **STRETCH):
+                st.session_state.reports = [item for item in st.session_state.reports if item["id"] != rid]
+                delete_report(rid)
+                auto_monitor_and_notify()
+                st.session_state.flash = ("success", f"Report {rid} deleted.")
+                st.rerun()
+
+        my_reports = [r for r in st.session_state.reports
+                      if r.get("user_email", "").casefold() == current_user["email"]]
+        type_filter = st.segmented_control("Report type", ["All", "Lost", "Found"],
+                                           default="All", key="my_reports_type")
+        filtered = list(reversed(my_reports))
+        if type_filter and type_filter != "All":
+            filtered = [r for r in filtered if r["type"] == type_filter]
+        if not filtered:
+            st.info("You have no reports matching this filter yet. Submit a Lost or Found report to see it here.")
+        for r in filtered:
+            ensure_custody(r)
+            with st.container(key=f"my_report_{r['id']}"):
+                cols = st.columns([4, 2, 2, 1])
+                cols[0].markdown(f"**{esc(r['item'])}**<br><span class='rid'>{r['id']}</span>", unsafe_allow_html=True)
+                cols[1].markdown(type_pill(r), unsafe_allow_html=True)
+                holder = f"Held by: {esc(r.get('holder', 'Finder'))}" if r["type"] == "Found" else r["status"]
+                cols[2].caption(holder)
+                if cols[3].button("Manage", key=f"my_manage_{r['id']}", **STRETCH):
+                    manage_my_report(r["id"])
+
+    # ========================================================
     # RECORDS
     # ========================================================
     elif active == "Lost & Found Records":
         html("""<div class="eyebrow">CAMPUS RECORDS</div><div class="page-title">Lost & Found Records</div>
         <div class="page-sub">Search found reports and your own lost reports. Administrators can review all records.</div>""")
+        render_page_refresh()
 
         status_options = ["All statuses"] + sorted({r["status"] for r in st.session_state.reports})
         if st.session_state.records_type_filter not in ("Lost & Found", "Lost", "Found"):
@@ -1211,6 +1296,7 @@ with body:
         <div style="font-size:12px;color:#52657a;margin-bottom:14px">
           Strongest and weakest factors below explain the score; campus staff still verify ownership.
         </div>""")
+        render_page_refresh()
 
         pairs = current_pairs()
         if current_user["role"] != "admin":
@@ -1299,6 +1385,7 @@ with body:
         html("""<div class="eyebrow">YOUR SMARTFIND INBOX</div>
         <div class="page-title">Notifications</div>
         <div class="page-sub">Strong possible matches for your reports. Inbox notices always appear here; email delivery status is shown on each notice.</div>""")
+        render_page_refresh()
         notifications = st.session_state.notifications
         notification_filter = st.segmented_control(
             "Show", options=["All", "Unread", "Read"], default="All",

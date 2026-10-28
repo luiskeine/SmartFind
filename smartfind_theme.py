@@ -210,11 +210,22 @@ def theme_stylesheet(theme, active_nav_index=None):
       color:var(--sf-muted) !important; fill:var(--sf-muted) !important;
     }}
     .stApp [data-baseweb="popover"] [role="listbox"],
-    .stApp [data-baseweb="popover"] [role="option"] {{
+    .stApp [data-baseweb="popover"] [role="listbox"] *,
+    .stApp [data-baseweb="popover"] [role="option"],
+    .stApp [data-baseweb="popover"] [role="option"] * {{
       background:var(--sf-surface) !important; color:var(--sf-text) !important;
     }}
-    .stApp [data-baseweb="popover"] [role="option"]:hover {{
-      background:var(--sf-elevated) !important;
+    .stApp [data-baseweb="popover"] [role="option"]:hover,
+    .stApp [data-baseweb="popover"] [role="option"]:hover * {{
+      background:var(--sf-elevated) !important; color:var(--sf-text) !important;
+    }}
+    .stApp [data-baseweb="popover"] [aria-selected="true"],
+    .stApp [data-baseweb="popover"] [aria-selected="true"] * {{
+      background:var(--sf-primary-bg) !important; color:var(--sf-primary-text) !important;
+    }}
+    .stApp [data-baseweb="select"] [role="button"],
+    .stApp [data-baseweb="select"] [role="button"] * {{
+      background:var(--sf-surface) !important; color:var(--sf-text) !important;
     }}
     .stApp [data-testid="stTextInputRootElement"]:focus-within,
     .stApp [data-testid="stTextAreaRootElement"]:focus-within,
@@ -427,13 +438,25 @@ def theme_stylesheet(theme, active_nav_index=None):
     }}
     .stApp [data-testid="stMarkdownContainer"] [style*="color:#718096"],
     .stApp [data-testid="stMarkdownContainer"] [style*="color: #718096"],
+    .stApp [data-testid="stMarkdownContainer"] [style*="color:#52657a"],
+    .stApp [data-testid="stMarkdownContainer"] [style*="color: #52657a"],
     .stApp [data-testid="stMarkdownContainer"] [style*="color:#a0aec0"] {{
       color:var(--sf-muted) !important;
+    }}
+    .stApp [data-testid="stMarkdownContainer"] [style*="color:#2a4365"] {{
+      color:var(--sf-notification-text) !important;
     }}
     .stApp [data-testid="stMarkdownContainer"] [style*="background:#fff"],
     .stApp [data-testid="stMarkdownContainer"] [style*="background: #fff"],
     .stApp [data-testid="stMarkdownContainer"] [style*="background:#ffffff"] {{
       background:var(--sf-surface) !important;
+    }}
+    .stApp [data-testid="stMarkdownContainer"] [style*="background:#f7fafc"],
+    .stApp [data-testid="stMarkdownContainer"] [style*="background:#edf2f7"] {{
+      background:var(--sf-elevated) !important;
+    }}
+    .stApp [data-testid="stMarkdownContainer"] [style*="background:#fffaf0"] {{
+      background:var(--sf-warning-bg) !important;
     }}
     :focus-visible {{ outline:3px solid var(--sf-accent) !important; outline-offset:3px !important; }}
     @media (prefers-reduced-motion: reduce) {{

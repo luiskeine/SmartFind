@@ -800,30 +800,51 @@ class MobileNavigationTests(unittest.TestCase):
 
 
 class DataRefreshTests(unittest.TestCase):
-    def test_tab_navigation_requests_a_refresh_on_the_next_run(self):
+    def test_tab_navigation_does_not_request_a_database_refresh(self):
         source = Path("main.py").read_text(encoding="utf-8")
-        navigate = source[source.index("def navigate(page):"):source.index("\n\ndef next_id():")]
-        self.assertIn("st.session_state.refresh_data_on_next_run = True", navigate)
+        navigate = source[source.index("def navigate(page):"):source.index("\n\ndef render_page_refresh():")]
+        self.assertNotIn("refresh_data_on_next_run", navigate)
         self.assertIn("st.rerun()", navigate)
-        self.assertIn("refresh_requested or not st.session_state.get(\"reports_loaded\", False)", source)
+        self.assertIn('DATA_PAGES = ("Lost & Found Records", "Possible Matches", "Notifications")', source)
+        self.assertIn("entered_data_page", source)
 
     def test_refresh_reloads_reports_and_inbox_without_creating_alerts(self):
         source = Path("main.py").read_text(encoding="utf-8")
         refresh = source[source.index("def refresh_session_data(owner_email):"):
-                         source.index("\n\nrefresh_requested =", source.index("def refresh_session_data(owner_email):"))]
+                         source.index("\n\nactive = st.session_state.page",
+                                      source.index("def refresh_session_data(owner_email):"))]
         self.assertIn("reports = load_reports()", refresh)
         self.assertIn("load_notifications(owner_email)", refresh)
         for side_effect in ("auto_monitor_and_notify", "new_notifications",
                             "save_notifications", "deliver_pending_notification_emails"):
             self.assertNotIn(side_effect, refresh)
 
-    def test_manual_refresh_is_available_from_desktop_and_mobile_navigation(self):
+    def test_manual_refresh_is_local_to_live_data_pages(self):
         source = Path("main.py").read_text(encoding="utf-8")
-        self.assertIn('st.button("↻ Refresh data", key="refresh_data"', source)
-        self.assertIn('st.button("↻ Refresh data", key="mobile_refresh_data"', source)
+        self.assertNotIn('key="refresh_data"', source)
+        self.assertNotIn('key="mobile_refresh_data"', source)
+        self.assertIn('key=f"refresh_{active}"', source)
+        self.assertEqual(source.count("        render_page_refresh()"), 3)
         request = source[source.index("def request_data_refresh():"):source.index("\n\ndef navigate(page):")]
         self.assertIn("refresh_data_on_next_run = True", request)
         self.assertIn("manual_data_refresh_requested = True", request)
+
+    def test_my_reports_has_owner_only_custody_and_delete_workflows(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        my_reports = source[source.index('elif active == "My Reports":'):
+                            source.index('elif active == "Lost & Found Records":')]
+        self.assertIn('(\"My Reports\", "▣")', source)
+        self.assertIn('r.get("user_email", "").casefold() == current_user["email"]', my_reports)
+        self.assertIn('"Current holder"', my_reports)
+        self.assertIn("Custody history", my_reports)
+        self.assertIn("confirm_delete", my_reports)
+        self.assertIn("delete_report(rid)", my_reports)
+
+    def test_dropdown_popovers_use_theme_selected_and_hover_colors(self):
+        source = smartfind_theme.theme_stylesheet("dark")
+        self.assertIn('[aria-selected="true"]', source)
+        self.assertIn('color:var(--sf-primary-text)', source)
+        self.assertIn('[role="option"]:hover', source)
 
 
 class EmailDeliveryTests(unittest.TestCase):

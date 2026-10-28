@@ -97,6 +97,97 @@
 			"command": "python -m unittest -v 2>&1 | Select-Object -Last 20",
 			"isBackground": false,
 			"problemMatcher": []
+		},
+		{
+			"label": "Run focused and full SmartFind unittest suites",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"test_smartfind.DataRefreshTests",
+				"-v",
+				"&&",
+				"C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+				"-m",
+				"unittest",
+				"-v"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Run focused SmartFind unit tests",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"test_smartfind.DataRefreshTests",
+				"-v"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Run full SmartFind unittest suite",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"-v"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Focused DataRefreshTests",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"test_smartfind.DataRefreshTests",
+				"-v"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "Full unittest suite",
+			"type": "shell",
+			"command": "C:/Users/Elias/AppData/Local/Programs/Python/Python312/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"-v"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "Run requested validation commands",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"-m",
+				"unittest",
+				"-v"
+			],
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Validate tests, compilation, and diff",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"-c",
+				"import subprocess,re; p=subprocess.run(['python','-m','unittest','-v'],capture_output=True,text=True); out=p.stdout+p.stderr; print('\\n'.join(x for x in out.splitlines() if x.startswith(('test','FAIL:','ERROR:','Ran ','FAILED (','OK')))); print('UNITTEST_EXIT',p.returncode); c=subprocess.run(['python','-m','compileall','-q','main.py','smartfind_core.py','smartfind_theme.py','test_smartfind.py']); print('COMPILEALL', 'succeeded' if c.returncode==0 else f'failed (exit {c.returncode})'); d=subprocess.run(['git','--no-pager','diff','--check'],capture_output=True,text=True); print('DIFF_CHECK_EXIT',d.returncode); print((d.stdout+d.stderr).strip())"
+			],
+			"isBackground": false,
+			"problemMatcher": []
 		}
 	]
 }
