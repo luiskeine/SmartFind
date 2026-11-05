@@ -459,6 +459,9 @@ def theme_stylesheet(theme, active_nav_index=None):
       background:var(--sf-warning-bg) !important;
     }}
     :focus-visible {{ outline:3px solid var(--sf-accent) !important; outline-offset:3px !important; }}
+    .stApp details.rec > summary:focus-visible {{
+      outline:3px solid var(--sf-accent) !important; outline-offset:3px !important;
+    }}
     @media (prefers-reduced-motion: reduce) {{
       *, *::before, *::after {{
         animation-duration:.01ms !important; animation-iteration-count:1 !important;

@@ -11,10 +11,11 @@ import smartfind_mail
 import smartfind_vision
 import smartfind_store
 import smartfind_theme
+import smartfind_demo
 from smartfind_auth import create_guest_credentials, guest_code_digest, resolve_role
 from smartfind_core import (CUSTODY_HOLDERS, NOTIFY_THRESHOLD, calculate_match_score,
                             can_update_custody, compare_locations, ensure_custody,
-                            find_pairs, new_notifications, normalize_location,
+                            explain_match_evidence, find_pairs, new_notifications, normalize_location,
                             transfer_custody)
 
 
@@ -113,6 +114,59 @@ class ScoreTests(unittest.TestCase):
                                         report("F1", "Found", location="Study Hall"))
         self.assertEqual(state(rows, "Location")["pts"], 0)
         self.assertEqual(s, 80)
+
+    def test_match_explanation_separates_supporting_evidence_from_review_items(self):
+        _, rows = calculate_match_score(
+            report("L1", "Lost", color="", location="Library"),
+            report("F1", "Found", color="Black", location="Gymnasium"))
+
+        supporting, review = explain_match_evidence(rows)
+
+        self.assertIn("Category (+35)", supporting[0])
+        self.assertTrue(any("Color: Color not provided" in item for item in review))
+        self.assertTrue(any("Location: Different location" in item for item in review))
+
+
+class DemoScenarioTests(unittest.TestCase):
+    def test_scenarios_are_repeatable_and_isolated_from_each_other(self):
+        self.assertEqual(smartfind_demo.demo_scenario_names(), (
+            "Strong evidence", "Partial evidence", "Conflicting details"))
+        scores = {}
+        for name in smartfind_demo.demo_scenario_names():
+            scenario = smartfind_demo.get_demo_scenario(name)
+            score, _ = calculate_match_score(scenario["lost"], scenario["found"])
+            scores[name] = score
+            self.assertTrue(scenario["lost"]["id"].startswith("DEMO-"))
+            self.assertTrue(scenario["found"]["id"].startswith("DEMO-"))
+            self.assertEqual(scenario["lost"]["type"], "Lost")
+            self.assertEqual(scenario["found"]["type"], "Found")
+            self.assertNotEqual(scenario["lost"]["user_email"], scenario["found"]["user_email"])
+            pairs = find_pairs([scenario["lost"], scenario["found"]])
+            self.assertEqual(len(pairs), int(score >= 40))
+            if pairs:
+                self.assertEqual(pairs[0][0], score)
+
+        self.assertEqual(scores, {
+            "Strong evidence": 100,
+            "Partial evidence": 72,
+            "Conflicting details": 0,
+        })
+        repeated = smartfind_demo.get_demo_scenario("Strong evidence")
+        repeated["lost"]["item"] = "Changed in test"
+        self.assertNotEqual(smartfind_demo.get_demo_scenario("Strong evidence")["lost"]["item"],
+                            "Changed in test")
+
+    def test_unknown_demo_scenario_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unknown SmartFind demo scenario"):
+            smartfind_demo.get_demo_scenario("not a scenario")
+
+    def test_demo_page_never_persists_samples_or_runs_notification_workflows(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        self.assertIn('("Demo Scenarios", "▶")', source)
+        demo_page = source[source.index('elif active == "Demo Scenarios":'):
+                           source.index('elif active == "Notifications":')]
+        for side_effect in ("save_report(", "save_notifications(", "auto_monitor_and_notify("):
+            self.assertNotIn(side_effect, demo_page)
 
 
 class PairAndNotificationTests(unittest.TestCase):
@@ -744,6 +798,9 @@ class ThemeTests(unittest.TestCase):
 
     def test_theme_stylesheet_defaults_unknown_theme_to_light(self):
         self.assertIn("color-scheme:light", smartfind_theme.theme_stylesheet("unknown"))
+
+    def test_keyboard_focus_is_visible_for_record_disclosures(self):
+        self.assertIn("details.rec > summary:focus-visible", smartfind_theme.theme_stylesheet("light"))
 
     def test_theme_stylesheet_is_injected_before_auth_and_after_app_styles(self):
         source = Path("main.py").read_text(encoding="utf-8")

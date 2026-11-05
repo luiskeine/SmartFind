@@ -22,8 +22,10 @@ from html import escape as _esc
 import streamlit as st
 
 from smartfind_core import (CUSTODY_HOLDERS, MATCH_THRESHOLD, NOTIFY_THRESHOLD,
-                            calculate_match_score, can_update_custody, ensure_custody,  # noqa: F401
+                            calculate_match_score, can_update_custody, ensure_custody,
+                            explain_match_evidence,  # noqa: F401
                             find_pairs, new_notifications, transfer_custody)
+from smartfind_demo import demo_scenario_names, get_demo_scenario
 from smartfind_auth import create_guest_credentials, guest_code_digest, resolve_role
 from smartfind_vision import (MODEL_LABELS, MODEL_PATHS, TRAINED_CATEGORIES,
                               brands_for_category, classify_image, normalize_brand,
@@ -264,6 +266,7 @@ PAGES = [
     ("My Reports", "▣"),
     ("Lost & Found Records", "▤"),
     ("Possible Matches", "⛓"),
+    ("Demo Scenarios", "▶"),
     ("Notifications", "🔔"),
 ]
 if current_user["role"] == "admin":
@@ -299,6 +302,10 @@ def request_data_refresh():
 def navigate(page):
     st.session_state.page = page
     st.rerun()
+
+
+def reset_demo_scenario():
+    st.session_state.demo_scenario = demo_scenario_names()[0]
 
 
 def render_page_refresh():
@@ -445,6 +452,7 @@ def render_report_wizard(report_type):
         elif step == 2:
             st.markdown("#### 2 · Describe the item")
             st.caption("Your draft is private to your account until you explicitly submit it.")
+            st.caption("Fields marked with * are required.")
             suggestion = draft.get("suggestion") or {}
             suggested_category = suggestion.get("category")
             category_key = "report_category_" + report_type
@@ -521,8 +529,7 @@ def render_report_wizard(report_type):
                 if review and not location.strip():
                     errors.append(f"Please enter where the item was {'last seen' if is_lost else 'found'}.")
                 if errors:
-                    for error in errors:
-                        st.error(error)
+                    st.error("Please review the following required details: " + " ".join(errors))
                 else:
                     payload = {
                         **draft, "step": 1 if back else 3, "photo": draft.get("photo"),
@@ -1294,7 +1301,8 @@ with body:
           <span class="pill pill-lost"><strong>Weak 40–74</strong> · context only</span>
         </div>
         <div style="font-size:12px;color:#52657a;margin-bottom:14px">
-          Strongest and weakest factors below explain the score; campus staff still verify ownership.
+          Each result shows which details added points and which were missing, partial, or conflicting.
+          Campus staff still verify ownership.
         </div>""")
         render_page_refresh()
 
@@ -1319,60 +1327,57 @@ with body:
             {'<br>Current holder: <strong>' + esc(r.get("holder", "Finder")) + '</strong>' if r['type'] == 'Found' else ''}
             </div></div>"""
 
-        ICON = {"match": ("✓", "#2f855a"), "partial": ("◐", "#dd6b20"),
-                "differ": ("✗", "#c53030"), "unverified": ("?", "#a0aec0")}
-
         for s, lo, fo, rows in pairs:
             label = "Strong possible match" if s >= NOTIFY_THRESHOLD else "Weak possible match"
-            checks = ""
-            ranked_rows = sorted(rows, key=lambda row: row["pts"], reverse=True)
-            strongest = ranked_rows[0]
-            weakest = min(rows, key=lambda row: row["pts"])
-            summary = (f'<div style="background:#f7fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;'
-                       f'margin-bottom:10px;font-size:12px"><strong>Why this score:</strong> '
-                       f'{esc(strongest["rule"])} contributed the most; '
-                       f'{esc(weakest["rule"])} contributed the least.</div>')
-            for x in rows:
-                ic, col = ICON[x["state"]]
-                checks += (f'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 0;'
-                           f'border-bottom:1px solid #edf2f7;font-size:12px"><span><span style="color:{col};'
-                           f'font-weight:800">{ic}</span>&nbsp; <strong>{x["rule"]}</strong>'
-                           f'<span style="color:#718096">&nbsp;{x["detail"]}</span></span>'
-                           f'<span style="color:{col};font-weight:700;white-space:nowrap">{x["result"]}</span></div>')
+            supporting, review = explain_match_evidence(rows)
             notif_line = ""
             if f"{lo['id']}_{fo['id']}" in notified:
                 notif_line = ('<div style="margin-top:10px;font-size:11px;color:#2a4365">'
                               'Inbox notification sent to the report owners.</div>')
             with st.container(key=f"card_match_{lo['id']}_{fo['id']}"):
-                html(f"""
-                <div class="m-top">
+                html(f"""<div class="m-top">
                   {side('LOST REPORT', '#2b6cb0', lo)}
-                  <div class="m-link">⛓</div>
+                  <div class="m-link" aria-hidden="true">⛓</div>
                   {side('FOUND REPORT', '#2a9d8f', fo)}
-                </div>
-                <div class="m-bottom">
-                  <div class="score-panel" style="width:240px;background:linear-gradient(160deg,#0e2a47,#1c525f);padding:24px;color:#fff;text-align:center">
+                </div>""")
+                score_col, evidence_col = st.columns([1, 2.4])
+                with score_col:
+                    html(f"""<div class="score-panel" role="meter" aria-label="Rule-based similarity score"
+                    aria-valuemin="0" aria-valuemax="100" aria-valuenow="{s}"
+                    style="background:linear-gradient(160deg,#0e2a47,#1c525f);padding:24px;color:#fff;text-align:center">
                     <div style="font-size:10px;letter-spacing:1px;opacity:.7">SIMILARITY SCORE</div>
                     <div style="margin:14px auto;width:112px;height:112px;border-radius:50%;
                     background:conic-gradient(#2aa99b {s * 3.6}deg, rgba(255,255,255,.15) 0);
                     display:flex;align-items:center;justify-content:center">
                       <div style="width:90px;height:90px;border-radius:50%;background:#10345a;display:flex;
-                      align-items:center;justify-content:center;flex-direction:column;font-weight:800">
+                      align-items:center;justify-content:center;flex-direction:column;font-weight:800"
+                      aria-hidden="true">
                       <span style="font-size:28px;line-height:1">{s}</span>
                       <span style="font-size:11px;opacity:.7;font-weight:600">out of 100</span></div></div>
                     <div style="font-size:15px;font-weight:700">{label}</div>
-                    <div style="font-size:10px;opacity:.7;margin-top:4px">Rule-based similarity of report details. Not a probability; not proof of ownership.</div>
-                  </div>
-                  <div style="flex:1;padding:18px 22px;background:#fff">
-                    <div style="font-size:11px;font-weight:800;color:#2a9d8f">WHY THIS WAS MATCHED</div>
-                    <div style="font-size:17px;margin-bottom:6px">Comparison breakdown</div>{summary}{checks}
-                    <div style="font-size:10px;color:#a0aec0;margin-top:8px">✓ matches · ◐ partly matches · ✗ differs · ? not provided, so it earns no points</div>
-                  </div>
-                </div>
-                <div style="margin-top:12px;background:#fffaf0;border:1px solid #fbd38d;color:#9c4221;
-                padding:10px 14px;border-radius:8px;font-size:12px">⚠ Possible match only. Ownership must be
-                verified at the campus Lost & Found office.</div>{notif_line}
-                """)
+                    <div style="font-size:10px;opacity:.85;margin-top:4px">Rule-based similarity, not a probability or proof of ownership.</div>
+                    </div>""")
+                with evidence_col:
+                    st.markdown("#### Why this score?")
+                    st.caption("Details contributing points")
+                    if supporting:
+                        st.markdown("\n".join(f"- {item}" for item in supporting))
+                    else:
+                        st.caption("No reported details earned points.")
+                    st.caption("Details to double-check")
+                    if review:
+                        st.markdown("\n".join(f"- {item}" for item in review))
+                    else:
+                        st.caption("All compared factors received full available points.")
+                    st.table([{
+                        "Factor": row["rule"],
+                        "Evidence": row["detail"],
+                        "Points": row["pts"],
+                        "Assessment": row["result"],
+                    } for row in rows])
+                st.warning("Possible match only. Verify ownership at the campus Lost & Found office.")
+                if notif_line:
+                    html(notif_line)
             st.write("")
         if not pairs:
             html("""<div style="background:#fff;border:1px dashed #cbd5e0;border-radius:14px;padding:32px 20px;text-align:center">
@@ -1380,6 +1385,48 @@ with body:
             <div style="font-size:15px;font-weight:700;color:#1a202c;margin-top:6px">No possible matches yet</div>
             <div style="font-size:12px;color:#718096;margin-top:4px;line-height:1.6">SmartFind compares every new lost and
             found report against the open reports on the other side.<br>Matches will appear here as soon as one is found.</div></div>""")
+
+    elif active == "Demo Scenarios":
+        html("""<div class="eyebrow">PRESENTATION MODE</div>
+        <div class="page-title">Demo Scenarios</div>
+        <div class="page-sub">Explore repeatable examples of how SmartFind compares reports. These examples are synthetic,
+        remain separate from real records, and are never saved or used for notifications.</div>""")
+        st.info("Demo scenarios are temporary examples. They do not change Supabase reports, notifications, or match results.")
+        name_col, reset_col = st.columns([4, 1])
+        selected_scenario = name_col.selectbox(
+            "Choose a sample scenario", demo_scenario_names(), key="demo_scenario")
+        reset_col.button("Reset", key="reset_demo_scenario", on_click=reset_demo_scenario,
+                         help="Return to the first sample scenario.")
+        scenario = get_demo_scenario(selected_scenario)
+        lost, found = scenario["lost"], scenario["found"]
+        st.caption(scenario["description"])
+
+        lost_col, found_col = st.columns(2)
+        for column, heading, sample in (
+                (lost_col, "Lost report", lost), (found_col, "Found report", found)):
+            with column:
+                st.markdown(f"#### {heading}")
+                st.write(f"**Item:** {sample['item']}")
+                st.write(f"**Category:** {sample['category']}")
+                st.write(f"**Color:** {sample['color']}")
+                st.write(f"**Location:** {sample['location']}")
+                st.write(f"**Date:** {fmt_date(sample['date'])}")
+                st.write(f"**Description:** {sample['description']}")
+
+        score, rows = calculate_match_score(lost, found)
+        st.metric("Rule-based similarity score", f"{score}/100")
+        if score >= MATCH_THRESHOLD:
+            st.success(f"This example appears in Possible Matches (display threshold: {MATCH_THRESHOLD}/100).")
+        else:
+            st.info(f"This example stays below the Possible Matches threshold ({MATCH_THRESHOLD}/100).")
+        st.markdown("#### What the comparison used")
+        st.table([{
+            "Factor": row["rule"],
+            "Evidence": row["detail"],
+            "Points": row["pts"],
+            "Assessment": row["result"],
+        } for row in rows])
+        st.caption("A similarity score is not a probability or proof of ownership. Campus staff must verify claims.")
 
     elif active == "Notifications":
         html("""<div class="eyebrow">YOUR SMARTFIND INBOX</div>

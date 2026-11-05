@@ -239,6 +239,19 @@ def transfer_custody(report, holder, actor, timestamp):
     return True
 
 
+def explain_match_evidence(rows):
+    """Split score factors into points earned and details that need review."""
+    supporting = [
+        f"{row['rule']} (+{row['pts']}) — {row['detail']}"
+        for row in rows if row["pts"] > 0
+    ]
+    review = [
+        f"{row['rule']}: {row['detail']}"
+        for row in rows if row["state"] != "match"
+    ]
+    return supporting, review
+
+
 def find_pairs(reports, min_score=MATCH_THRESHOLD):
     """Unresolved lost/found pairs scoring at least min_score, best first."""
     pairs = []

@@ -105,9 +105,15 @@ For a five-minute demonstration:
 4. Show the updated Records/details label and the custody-history entry.
 5. If desired, demonstrate an authorized admin changing the holder back to **Finder** and explaining that only the report owner or admin can make this update.
 
+## In-app demo scenarios
+
+Open **Demo Scenarios** in the sidebar to show three repeatable examples: strong evidence, partial evidence, and conflicting details. Each scenario shows the two sample reports, the rule-based score, and the factor-by-factor evidence table. Use **Reset** to return to the strong-evidence example.
+
+These are synthetic, in-memory examples only. They are separate from real reports, are not saved to Supabase, and do not create notifications. The live **Possible Matches** page also shows the points earned for each factor and highlights details that are partial, missing, or conflicting. Scores remain similarity heuristics—not probabilities or proof of ownership.
+
 ## Data, tests, and current limitations
 
-- Supabase projects start empty; there are no local demo records or SQLite migration path.
+- Supabase projects start empty; there are no persisted demo records or SQLite migration path. The in-app demo scenarios are temporary and do not write to storage.
 - Run the pure-logic and storage/vision tests with `python -m unittest -v`.
 - Notifications persist in each owner's inbox; SMTP email requires Gmail credentials in Streamlit Secrets.
 - Use authentic photos from the supported classes to evaluate model accuracy and tune the confidence threshold before operational use.
