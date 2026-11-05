@@ -268,6 +268,34 @@ def match_review_checklist(rows):
     ))
 
 
+def report_quality_suggestions(report):
+    """Return optional hints for report details used during matching."""
+    suggestions = []
+    category = str(report.get("category") or "").strip().casefold()
+    if not category or category == "other":
+        suggestions.append("Choose a more specific item category if you can.")
+    if not str(report.get("color") or "").strip():
+        suggestions.append("Add the item's color if you know it.")
+    if not str(report.get("brand") or "").strip():
+        suggestions.append("A visible brand name can help distinguish similar items.")
+    try:
+        datetime.strptime(str(report.get("date") or ""), "%Y-%m-%d")
+    except ValueError:
+        suggestions.append("Double-check the date; an accurate estimate is useful too.")
+
+    location = str(report.get("location") or "").strip()
+    normalized_location = normalize_location(location)
+    if location and normalized_location["area"] and not normalized_location["room"]:
+        suggestions.append("Add a floor, room, or nearby landmark if you know one.")
+    elif location and not normalized_location["room"] and len(location.split()) == 1:
+        suggestions.append("Add a building, floor, or nearby landmark to make the location clearer.")
+
+    description_words = re.findall(r"[a-z0-9]+", str(report.get("description") or "").casefold())
+    if len(description_words) < 3:
+        suggestions.append("Add a distinctive mark, accessory, or other identifying detail if available.")
+    return suggestions
+
+
 def can_review_matches(current_user):
     """Only configured admins can record staff review decisions."""
     return current_user.get("role") == "admin"

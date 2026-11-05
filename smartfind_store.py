@@ -93,6 +93,25 @@ def initialize_storage():
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (lost_report_id, found_report_id)
             )""")
+            connection.execute("""CREATE TABLE IF NOT EXISTS match_review_history (
+                id BIGSERIAL PRIMARY KEY,
+                lost_report_id TEXT NOT NULL,
+                found_report_id TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (status IN
+                    ('follow_up', 'dismissed', 'needs_more_information')),
+                reviewer TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )""")
+            connection.execute("""INSERT INTO match_review_history
+                (lost_report_id, found_report_id, status, reviewer, updated_at)
+                SELECT current.lost_report_id, current.found_report_id, current.status,
+                    current.reviewer, current.updated_at
+                FROM match_reviews AS current
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM match_review_history AS history
+                    WHERE history.lost_report_id = current.lost_report_id
+                        AND history.found_report_id = current.found_report_id
+                )""")
             connection.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS email_status TEXT NOT NULL DEFAULT 'pending'")
             connection.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS email_attempted_at TEXT")
             connection.execute("ALTER TABLE notifications ADD COLUMN IF NOT EXISTS email_sent_at TEXT")
@@ -106,6 +125,7 @@ def initialize_storage():
             connection.execute("ALTER TABLE report_drafts ENABLE ROW LEVEL SECURITY")
             connection.execute("ALTER TABLE notifications ENABLE ROW LEVEL SECURITY")
             connection.execute("ALTER TABLE match_reviews ENABLE ROW LEVEL SECURITY")
+            connection.execute("ALTER TABLE match_review_history ENABLE ROW LEVEL SECURITY")
             connection.commit()
         except Exception:
             connection.rollback()
@@ -160,6 +180,9 @@ def delete_report(report_id):
         connection.execute(f"""DELETE FROM match_reviews
             WHERE lost_report_id = {placeholder} OR found_report_id = {placeholder}""",
                            (report_id, report_id))
+        connection.execute(f"""DELETE FROM match_review_history
+            WHERE lost_report_id = {placeholder} OR found_report_id = {placeholder}""",
+                           (report_id, report_id))
         connection.execute(f"DELETE FROM reports WHERE id = {placeholder}", (report_id,))
 
 
@@ -179,6 +202,21 @@ def load_match_reviews():
     }
 
 
+def load_match_review_history():
+    with _connect() as connection:
+        rows = connection.execute("""SELECT id, lost_report_id, found_report_id,
+            status, reviewer, updated_at FROM match_review_history ORDER BY id""").fetchall()
+    history = {}
+    for entry_id, lost_id, found_id, status, reviewer, updated_at in rows:
+        history.setdefault((lost_id, found_id), []).append({
+            "id": entry_id,
+            "status": status,
+            "reviewer": reviewer,
+            "updated_at": updated_at,
+        })
+    return history
+
+
 def save_match_review(lost_report_id, found_report_id, status, reviewer, updated_at):
     status = str(status).strip()
     reviewer = str(reviewer).strip().casefold()
@@ -189,6 +227,11 @@ def save_match_review(lost_report_id, found_report_id, status, reviewer, updated
     if not reviewer:
         raise ValueError("A reviewer identity is required.")
     with _connect() as connection:
+        connection.execute("""INSERT INTO match_review_history
+            (lost_report_id, found_report_id, status, reviewer, updated_at)
+            VALUES (%s, %s, %s, %s, %s)""",
+                           (str(lost_report_id).strip(), str(found_report_id).strip(),
+                            status, reviewer, str(updated_at).strip()))
         connection.execute("""INSERT INTO match_reviews
             (lost_report_id, found_report_id, status, reviewer, updated_at)
             VALUES (%s, %s, %s, %s, %s)

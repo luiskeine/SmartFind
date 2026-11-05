@@ -17,7 +17,8 @@ from smartfind_core import (CUSTODY_HOLDERS, NOTIFY_THRESHOLD, calculate_match_s
                             can_update_custody, compare_locations, ensure_custody,
                             can_review_matches, explain_match_evidence, find_pairs,
                             match_review_checklist, new_notifications,
-                            normalize_location, transfer_custody)
+                            normalize_location, report_quality_suggestions,
+                            transfer_custody)
 
 
 def report(rid, rtype, **kw):
@@ -138,6 +139,27 @@ class ScoreTests(unittest.TestCase):
         self.assertIn("Confirm the campus area, building, or room.", checklist)
         self.assertNotIn("Confirm the item type and category.", checklist)
         self.assertEqual(len(checklist), len(set(checklist)))
+
+    def test_report_quality_coach_suggests_only_optional_details(self):
+        suggestions = report_quality_suggestions({
+            "category": "Other", "color": "", "brand": "",
+            "location": "Library", "date": "", "description": "phone",
+        })
+
+        self.assertIn("Choose a more specific item category if you can.", suggestions)
+        self.assertIn("Add the item's color if you know it.", suggestions)
+        self.assertIn("Add a floor, room, or nearby landmark if you know one.", suggestions)
+        self.assertIn("Add a distinctive mark, accessory, or other identifying detail if available.",
+                      suggestions)
+        self.assertIn("A visible brand name can help distinguish similar items.", suggestions)
+        self.assertIn("Double-check the date; an accurate estimate is useful too.", suggestions)
+
+    def test_report_quality_coach_is_quiet_for_detailed_reports(self):
+        self.assertEqual(report_quality_suggestions({
+            "category": "Smartphone", "color": "Black", "brand": "Samsung",
+            "location": "Q-5312", "date": "2026-10-08",
+            "description": "cracked screen black case silver sticker",
+        }), [])
 
 
 class DemoScenarioTests(unittest.TestCase):
@@ -606,8 +628,15 @@ class ReportStoreTests(unittest.TestCase):
                                     for statement in ddl))
                 self.assertTrue(any("CREATE TABLE IF NOT EXISTS match_reviews" in statement
                                     for statement in ddl))
+                self.assertTrue(any("CREATE TABLE IF NOT EXISTS match_review_history" in statement
+                                    for statement in ddl))
+                self.assertTrue(any("INSERT INTO match_review_history" in statement
+                                    and "FROM match_reviews AS current" in statement
+                                    for statement in ddl))
                 self.assertTrue(any("ENABLE ROW LEVEL SECURITY" in statement for statement in ddl))
                 self.assertTrue(any("ALTER TABLE match_reviews ENABLE ROW LEVEL SECURITY" in statement
+                                    for statement in ddl))
+                self.assertTrue(any("ALTER TABLE match_review_history ENABLE ROW LEVEL SECURITY" in statement
                                     for statement in ddl))
                 with smartfind_store._connect() as connection:
                     connection.execute("SELECT payload::text FROM reports")
@@ -674,9 +703,35 @@ class ReportStoreTests(unittest.TestCase):
         self.assertEqual(reviews[("L1", "F1")]["status"], "needs_more_information")
         self.assertEqual(reviews[("L1", "F1")]["reviewer"], "admin@example.com")
         self.assertIn("ON CONFLICT (lost_report_id, found_report_id) DO UPDATE",
-                      connection.statements[1][0])
+                      connection.statements[2][0])
+        self.assertIn("INSERT INTO match_review_history", connection.statements[1][0])
         self.assertEqual(connection.statements[1][1], (
             "L1", "F1", "follow_up", "admin@example.com", "2026-11-05T13:00:00+00:00"))
+        self.assertEqual(connection.statements[2][1], (
+            "L1", "F1", "follow_up", "admin@example.com", "2026-11-05T13:00:00+00:00"))
+
+    def test_match_review_history_loads_in_insertion_order_per_pair(self):
+        rows = [
+            (1, "L1", "F1", "follow_up", "admin@example.com", "first"),
+            (2, "L1", "F1", "dismissed", "other-admin@example.com", "second"),
+        ]
+
+        class FakeCursor:
+            def fetchall(self):
+                return rows
+
+        class FakeConnection:
+            def execute(self, statement, params=None):
+                self.statement = statement
+                return FakeCursor()
+
+        connection = FakeConnection()
+        with patch.object(smartfind_store, "_connect", return_value=nullcontext(connection)):
+            history = smartfind_store.load_match_review_history()
+
+        self.assertEqual([entry["status"] for entry in history[("L1", "F1")]],
+                         ["follow_up", "dismissed"])
+        self.assertIn("ORDER BY id", connection.statement)
 
     def test_match_review_rejects_invalid_status_and_missing_reviewer(self):
         with patch.object(smartfind_store, "_connect") as connect:
@@ -704,7 +759,9 @@ class ReportStoreTests(unittest.TestCase):
 
         self.assertIn("DELETE FROM match_reviews", connection.statements[0][0])
         self.assertEqual(connection.statements[0][1], ("F1", "F1"))
-        self.assertIn("DELETE FROM reports", connection.statements[1][0])
+        self.assertIn("DELETE FROM match_review_history", connection.statements[1][0])
+        self.assertEqual(connection.statements[1][1], ("F1", "F1"))
+        self.assertIn("DELETE FROM reports", connection.statements[2][0])
 
     def test_ui_preferences_and_drafts_are_scoped_to_normalized_owner(self):
         class FakeCursor:
@@ -926,6 +983,31 @@ class MobileNavigationTests(unittest.TestCase):
         self.assertIn('"Submit report"', source)
         self.assertIn("persist_report_draft(report_type", source)
         self.assertIn("remove_report_draft(report_type)", source)
+        review_step = source[source.index('else:\n            st.markdown("#### 3 · Review and submit")'):
+                             source.index("if submit_col.button", source.index(
+                                 'else:\n            st.markdown("#### 3 · Review and submit")'))]
+        self.assertIn("report_quality_suggestions(coaching_report)", review_step)
+        self.assertIn("You can still submit as-is.", review_step)
+
+    def test_project_showcase_explains_pipeline_weights_and_limitations(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        self.assertIn('("Project Showcase", "ⓘ")', source)
+        showcase = source[source.index('elif active == "Project Showcase":'):
+                          source.index('elif active == "Notifications":')]
+        for expected in ("Perceive", "Reason", "Act", "Category", "Maximum points",
+                         "not a probability", "not verify that two photos show the same"):
+            self.assertIn(expected, showcase)
+
+    def test_resolution_walkthrough_is_synthetic_and_has_no_storage_side_effects(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        demo_page = source[source.index('elif active == "Demo Scenarios":'):
+                           source.index('elif active == "Project Showcase":')]
+        walkthrough = demo_page[demo_page.index('with st.expander("Walk through a sample match-to-resolution")'):]
+        self.assertIn("get_demo_scenario(\"Strong evidence\")", walkthrough)
+        self.assertIn("demo_resolution_step", walkthrough)
+        self.assertIn("No real reports, notifications, or database records are changed", walkthrough)
+        for side_effect in ("save_report(", "save_notifications(", "auto_monitor_and_notify("):
+            self.assertNotIn(side_effect, walkthrough)
 
     def test_theme_motion_and_responsive_styles_are_explicit(self):
         source = Path("main.py").read_text(encoding="utf-8")
@@ -983,9 +1065,11 @@ class DataRefreshTests(unittest.TestCase):
         matches = source[source.index('elif active == "Possible Matches":'):
                          source.index('elif active == "Demo Scenarios":')]
         self.assertIn("match_reviews = load_match_reviews()", matches)
+        self.assertIn("match_review_history = load_match_review_history()", matches)
         self.assertIn("if can_review_matches(current_user):", matches)
         self.assertIn("save_match_review(", matches)
         self.assertIn("match_review_checklist(rows)", matches)
+        self.assertIn("Review history for", matches)
         self.assertIn("review_record['reviewer']", matches)
         self.assertNotIn("auto_monitor_and_notify()", matches)
         self.assertNotIn("save_report(", matches)

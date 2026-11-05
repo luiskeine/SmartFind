@@ -26,14 +26,15 @@ from smartfind_core import (CUSTODY_HOLDERS, MATCH_THRESHOLD, NOTIFY_THRESHOLD,
                             can_update_custody, ensure_custody,
                             explain_match_evidence,  # noqa: F401
                             find_pairs, match_review_checklist,
-                            new_notifications, transfer_custody)
+                            new_notifications, report_quality_suggestions,
+                            transfer_custody)
 from smartfind_demo import demo_scenario_names, get_demo_scenario
 from smartfind_auth import create_guest_credentials, guest_code_digest, resolve_role
 from smartfind_vision import (MODEL_LABELS, MODEL_PATHS, TRAINED_CATEGORIES,
                               brands_for_category, classify_image, normalize_brand,
                               normalize_brand_candidates, normalize_category)
 from smartfind_store import (delete_report, load_notifications, load_reports,
-                             load_match_reviews, save_match_review,
+                             load_match_reviews, load_match_review_history, save_match_review,
                              fail_stuck_notification_emails, mark_all_notifications_read,
                              mark_notification_read,
                              notification_keys, pending_notification_emails,
@@ -270,6 +271,7 @@ PAGES = [
     ("Lost & Found Records", "▤"),
     ("Possible Matches", "⛓"),
     ("Demo Scenarios", "▶"),
+    ("Project Showcase", "ⓘ"),
     ("Notifications", "🔔"),
 ]
 if current_user["role"] == "admin":
@@ -309,6 +311,11 @@ def navigate(page):
 
 def reset_demo_scenario():
     st.session_state.demo_scenario = demo_scenario_names()[0]
+    st.session_state.demo_resolution_step = 0
+
+
+def reset_demo_walkthrough():
+    st.session_state.demo_resolution_step = 0
 
 
 def render_page_refresh():
@@ -562,6 +569,21 @@ def render_report_wizard(report_type):
             if draft.get("photo"):
                 html(f'<img src="{draft["photo"]}" alt="Attached report photo" '
                      'style="width:140px;height:140px;object-fit:cover;border-radius:12px">')
+            coaching_report = {
+                "category": draft.get("category"),
+                "color": draft.get("color"),
+                "brand": draft.get("brand"),
+                "location": draft.get("location"),
+                "date": draft.get("date"),
+                "description": draft.get("description"),
+            }
+            quality_suggestions = report_quality_suggestions(coaching_report)
+            st.markdown("#### Report quality tips")
+            st.caption("Optional suggestions for details that may help SmartFind compare reports. You can still submit as-is.")
+            if quality_suggestions:
+                st.info("\n".join(f"- {suggestion}" for suggestion in quality_suggestions))
+            else:
+                st.success("Your report includes useful matching details. You can still edit it before submitting.")
 
             back_col, submit_col = st.columns(2)
             if back_col.button("Back to details", key=f"review_back_{report_type}"):
@@ -1316,6 +1338,7 @@ with body:
                                                    pair[2].get("user_email", "").casefold())]
         notified = {notification["pair_key"] for notification in st.session_state.notifications}
         match_reviews = load_match_reviews()
+        match_review_history = load_match_review_history()
 
         def side(label, color, r):
             return f"""<div style="flex:1;min-width:0;background:#fff;border:1px solid #e2e8f0;border-top:3px solid {color};
@@ -1396,8 +1419,18 @@ with body:
                             st.markdown("\n".join(f"- {item}" for item in checklist))
                 else:
                     st.caption("Staff review: Not yet reviewed.")
+                review_events = match_review_history.get((lo["id"], fo["id"]), [])
+                if review_events:
+                    with st.expander(
+                            f"Review history for {lo['id']} / {fo['id']} ({len(review_events)})"):
+                        st.table([{
+                            "Decision": review_labels[event["status"]],
+                            "Reviewer": event["reviewer"],
+                            "Updated": event["updated_at"],
+                        } for event in reversed(review_events)])
                 if can_review_matches(current_user):
-                    with st.expander("Record staff review", expanded=False):
+                    with st.expander(
+                            f"Record staff review for {lo['id']} / {fo['id']}", expanded=False):
                         options = {
                             "Follow up": "follow_up",
                             "Dismissed": "dismissed",
@@ -1471,6 +1504,97 @@ with body:
             "Assessment": row["result"],
         } for row in rows])
         st.caption("A similarity score is not a probability or proof of ownership. Campus staff must verify claims.")
+
+        with st.expander("Walk through a sample match-to-resolution"):
+            st.warning("Synthetic walkthrough only. No real reports, notifications, or database records are changed.")
+            st.session_state.setdefault("demo_resolution_step", 0)
+            stage = max(0, min(3, st.session_state.demo_resolution_step))
+            demo_pair = get_demo_scenario("Strong evidence")
+            demo_lost = dict(demo_pair["lost"])
+            demo_found = dict(demo_pair["found"])
+            stage_labels = (
+                "Possible match",
+                "Admin follow-up",
+                "Sample ownership check",
+                "Sample resolved",
+            )
+            st.progress((stage + 1) / len(stage_labels),
+                        text=f"Step {stage + 1} of {len(stage_labels)} · {stage_labels[stage]}")
+
+            if stage == 0:
+                st.write("SmartFind finds a strong possible match from the sample Lost and Found reports.")
+                next_label = "Simulate admin follow-up"
+            elif stage == 1:
+                st.write("A demo admin reviews the evidence and chooses **Follow up**. The score remains unchanged.")
+                next_label = "Simulate ownership verification"
+            elif stage == 2:
+                st.write("For this scripted example, staff verify a distinctive marking and confirm the sample claim.")
+                next_label = "Resolve sample reports"
+            else:
+                demo_lost["status"] = "Resolved"
+                demo_found["status"] = "Resolved"
+                st.success("The synthetic reports are now shown as resolved in this walkthrough.")
+                next_label = "Replay walkthrough"
+
+            status_col_lost, status_col_found = st.columns(2)
+            status_col_lost.write(f"**{demo_lost['id']} · Lost:** {demo_lost['status']}")
+            status_col_found.write(f"**{demo_found['id']} · Found:** {demo_found['status']}")
+            if stage < 3:
+                if st.button(next_label, key=f"demo_resolution_next_{stage}", type="primary"):
+                    st.session_state.demo_resolution_step = stage + 1
+                    st.rerun()
+            else:
+                if st.button(next_label, key="demo_resolution_replay", type="primary"):
+                    reset_demo_walkthrough()
+                    st.rerun()
+            st.button("Reset walkthrough", key="demo_resolution_reset",
+                      on_click=reset_demo_walkthrough)
+
+    elif active == "Project Showcase":
+        html("""<div class="eyebrow">COLLEGE PROJECT OVERVIEW</div>
+        <div class="page-title">How SmartFind Works</div>
+        <div class="page-sub">A walkthrough of the current prototype: what each agent does, how candidates are ranked,
+        and where people stay in control.</div>""")
+
+        perceive, reason, act = st.columns(3)
+        with perceive:
+            st.markdown("### 1 · Perceive")
+            st.write("A user may add a photo. YOLO proposes a supported object category and crop; OCR looks for visible text, and a simple pixel heuristic estimates color.")
+            st.caption("The user reviews and can correct suggestions. YOLO categories are not unique-item identification.")
+        with reason:
+            st.markdown("### 2 · Reason")
+            st.write("A rule-based comparison ranks open Lost and Found reports using category, color, location, date, and description evidence.")
+            st.caption("When a brand is provided, it shares the description factor's existing points; it does not add points to the total.")
+        with act:
+            st.markdown("### 3 · Act")
+            st.write("Strong possible matches create inbox notifications for report owners. Admins can add a separate review decision; found-item custody records Finder/OSA handoffs.")
+            st.caption("Human review and custody do not change the matching score or prove ownership.")
+
+        st.markdown("### Score factors")
+        st.table([
+            {"Factor": "Category", "Maximum points": 35},
+            {"Factor": "Color", "Maximum points": 20},
+            {"Factor": "Location", "Maximum points": 20},
+            {"Factor": "Date", "Maximum points": 15},
+            {"Factor": "Description", "Maximum points": 10},
+        ])
+        st.info(
+            f"Scores of {MATCH_THRESHOLD} or higher appear in Possible Matches. "
+            f"Scores of {NOTIFY_THRESHOLD} or higher can trigger inbox notifications. "
+            "The score is a rule-based similarity, not a probability or proof of ownership.")
+
+        with st.expander("What this prototype does not claim"):
+            st.markdown(
+                "- Photo detection classifies supported categories; it does not verify that two photos show the same individual item.\n"
+                "- Color estimates can be affected by lighting and backgrounds, and OCR can miss stylized text.\n"
+                "- A high score is a lead for human checking, not an ownership decision.\n"
+                "- Admin review is advisory; only verified real-world checks should resolve an actual claim.")
+
+        demo_col, matches_col = st.columns(2)
+        if demo_col.button("Explore demo scenarios", key="showcase_open_demo"):
+            navigate("Demo Scenarios")
+        if matches_col.button("View possible matches", key="showcase_open_matches"):
+            navigate("Possible Matches")
 
     elif active == "Notifications":
         html("""<div class="eyebrow">YOUR SMARTFIND INBOX</div>

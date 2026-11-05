@@ -21,7 +21,7 @@ Choose **Continue as guest** to create a persistent guest account. SmartFind gen
 
 ## Reports, drafts, and appearance
 
-Report submission uses a three-step flow: add an optional photo, enter and save private details, then review and explicitly submit. Incomplete drafts are stored in Supabase under the signed-in email or guest account and can be resumed on another device by signing in or using the guest recovery code. A draft is not visible as a report and does not participate in matching until submitted. Each account can keep one draft for each report type; deleting a draft removes it permanently. Use **My Reports** to review, update, resolve, delete, or transfer custody for reports submitted by the current account. Database data reloads at initial sign-in/account change and when entering **Lost & Found Records**, **Possible Matches**, or **Notifications**; use the Refresh data control inside those three pages to synchronize again. Ordinary navigation and form/widget reruns do not reload the database.
+Report submission uses a three-step flow: add an optional photo, enter and save private details, then review and explicitly submit. The review step includes a non-blocking quality coach that suggests useful optional details such as color, a more specific location, or distinctive marks. Suggestions never prevent submission or change match scoring. Incomplete drafts are stored in Supabase under the signed-in email or guest account and can be resumed on another device by signing in or using the guest recovery code. A draft is not visible as a report and does not participate in matching until submitted. Each account can keep one draft for each report type; deleting a draft removes it permanently. Use **My Reports** to review, update, resolve, delete, or transfer custody for reports submitted by the current account. Database data reloads at initial sign-in/account change and when entering **Lost & Found Records**, **Possible Matches**, or **Notifications**; use the Refresh data control inside those three pages to synchronize again. Ordinary navigation and form/widget reruns do not reload the database.
 
 Use **Dark theme** in the sidebar to switch appearance. Both themes explicitly style text, fields, primary/secondary/disabled buttons, navigation, and custom surfaces; declared foreground/background pairs are tested against WCAG AA contrast. Theme and Records search/filter preferences are saved to the account and restored across devices. The app uses brief interaction transitions and honors the device's reduced-motion preference. The layout adapts to phone, tablet, and desktop sizes; controls are sized for touch use.
 
@@ -93,9 +93,13 @@ YOLO category detection is not instance-level image matching: two objects of the
 
 ## Admin match review
 
-On **Possible Matches**, every configured admin can record the latest staff decision for a real Lost/Found pair: **Follow up**, **Dismissed**, or **Needs more information**. SmartFind shows the decision, reviewer account, and update time alongside the existing score. When more information is needed, the page suggests checks based on factors that were partial, missing, or conflicting.
+On **Possible Matches**, every configured admin can record a staff decision for a real Lost/Found pair: **Follow up**, **Dismissed**, or **Needs more information**. SmartFind shows the latest decision, reviewer account, and update time alongside the existing score; **Review history** preserves earlier decisions in order. When more information is needed, the page suggests checks based on factors that were partial, missing, or conflicting.
 
 Review is advisory and separate from the algorithm: it does not change match scores or ranking, resolve reports, hide dismissed candidates, suppress existing notifications, or contact users. Report owners can see the review state, but only admins can update it. Deleting either report also removes the pair's review.
+
+## Project showcase
+
+Open **Project Showcase** for an in-app explanation of the Perceive → Reason → Act pipeline, score weights and thresholds, human review and custody, and the prototype's limitations. It describes current behavior and is intended to support a college-project presentation; it is not an accuracy or performance claim.
 
 ## Found-item custody and handoff demo
 
@@ -113,7 +117,7 @@ For a five-minute demonstration:
 
 ## In-app demo scenarios
 
-Open **Demo Scenarios** in the sidebar to show three repeatable examples: strong evidence, partial evidence, and conflicting details. Each scenario shows the two sample reports, the rule-based score, and the factor-by-factor evidence table. Use **Reset** to return to the strong-evidence example.
+Open **Demo Scenarios** in the sidebar to show three repeatable examples: strong evidence, partial evidence, and conflicting details. Each scenario shows the two sample reports, the rule-based score, and the factor-by-factor evidence table. Use **Reset** to return to the strong-evidence example. The page also includes a scripted match-to-resolution walkthrough: a sample match, simulated admin follow-up, sample verification, and resolved sample reports. The walkthrough is synthetic and session-only; its steps do not change real reports, notifications, or Supabase data.
 
 These are synthetic, in-memory examples only. They are separate from real reports, are not saved to Supabase, and do not create notifications. The live **Possible Matches** page also shows the points earned for each factor and highlights details that are partial, missing, or conflicting. Scores remain similarity heuristics—not probabilities or proof of ownership.
 
