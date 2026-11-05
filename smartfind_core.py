@@ -252,6 +252,27 @@ def explain_match_evidence(rows):
     return supporting, review
 
 
+def match_review_checklist(rows):
+    """Suggest manual checks for score factors without full agreement."""
+    prompts = {
+        "Category": "Confirm the item type and category.",
+        "Color": "Ask for a more specific color or shade.",
+        "Location": "Confirm the campus area, building, or room.",
+        "Date": "Verify the date or approximate time it was lost or found.",
+        "Brand": "Check for visible brand text or a distinctive logo.",
+        "Description": "Ask about distinctive marks, accessories, or damage.",
+    }
+    return list(dict.fromkeys(
+        prompts.get(row["rule"], f"Double-check {row['rule'].lower()}.")
+        for row in rows if row["state"] != "match"
+    ))
+
+
+def can_review_matches(current_user):
+    """Only configured admins can record staff review decisions."""
+    return current_user.get("role") == "admin"
+
+
 def find_pairs(reports, min_score=MATCH_THRESHOLD):
     """Unresolved lost/found pairs scoring at least min_score, best first."""
     pairs = []

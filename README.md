@@ -91,6 +91,12 @@ The included `Dockerfile` builds a browser-accessible container. Build and run i
 
 YOLO category detection is not instance-level image matching: two objects of the same category are not visually proven to be the same object. The V1 and V2 checkpoints are selected per signed-in Streamlit session. Their labels are normalized into one shared category vocabulary (for example, `Smartphone` and `Mobile phone` both become `Mobile phone`) so reports from different model versions can still match. Category choices include the combined 24 labels; a given model can only detect classes it was trained to recognize. Color estimation is a basic pixel heuristic and can be affected by lighting/backgrounds; in no-detection fallback it samples the image center. OCR may miss stylized text and does not recognize logo graphics. With no detected category, OCR checks the whole photo against the combined brand shortlist, which may increase false positives; the user must confirm any suggested brand.
 
+## Admin match review
+
+On **Possible Matches**, every configured admin can record the latest staff decision for a real Lost/Found pair: **Follow up**, **Dismissed**, or **Needs more information**. SmartFind shows the decision, reviewer account, and update time alongside the existing score. When more information is needed, the page suggests checks based on factors that were partial, missing, or conflicting.
+
+Review is advisory and separate from the algorithm: it does not change match scores or ranking, resolve reports, hide dismissed candidates, suppress existing notifications, or contact users. Report owners can see the review state, but only admins can update it. Deleting either report also removes the pair's review.
+
 ## Found-item custody and handoff demo
 
 Each found report begins with **Finder** as the current holder. The student/person who submitted the report, or an authorized admin, can transfer custody to **OSA** after handing the item to the Office of Student Affairs. The control is available from the report details; admins can also update it in **Admin Management**.

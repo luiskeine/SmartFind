@@ -22,15 +22,18 @@ from html import escape as _esc
 import streamlit as st
 
 from smartfind_core import (CUSTODY_HOLDERS, MATCH_THRESHOLD, NOTIFY_THRESHOLD,
-                            calculate_match_score, can_update_custody, ensure_custody,
+                            calculate_match_score, can_review_matches,
+                            can_update_custody, ensure_custody,
                             explain_match_evidence,  # noqa: F401
-                            find_pairs, new_notifications, transfer_custody)
+                            find_pairs, match_review_checklist,
+                            new_notifications, transfer_custody)
 from smartfind_demo import demo_scenario_names, get_demo_scenario
 from smartfind_auth import create_guest_credentials, guest_code_digest, resolve_role
 from smartfind_vision import (MODEL_LABELS, MODEL_PATHS, TRAINED_CATEGORIES,
                               brands_for_category, classify_image, normalize_brand,
                               normalize_brand_candidates, normalize_category)
 from smartfind_store import (delete_report, load_notifications, load_reports,
+                             load_match_reviews, save_match_review,
                              fail_stuck_notification_emails, mark_all_notifications_read,
                              mark_notification_read,
                              notification_keys, pending_notification_emails,
@@ -1312,6 +1315,7 @@ with body:
                      if current_user["email"] in (pair[1].get("user_email", "").casefold(),
                                                    pair[2].get("user_email", "").casefold())]
         notified = {notification["pair_key"] for notification in st.session_state.notifications}
+        match_reviews = load_match_reviews()
 
         def side(label, color, r):
             return f"""<div style="flex:1;min-width:0;background:#fff;border:1px solid #e2e8f0;border-top:3px solid {color};
@@ -1375,6 +1379,46 @@ with body:
                         "Points": row["pts"],
                         "Assessment": row["result"],
                     } for row in rows])
+                review_record = match_reviews.get((lo["id"], fo["id"]))
+                review_labels = {
+                    "follow_up": "Follow up",
+                    "dismissed": "Dismissed",
+                    "needs_more_information": "Needs more information",
+                }
+                if review_record:
+                    st.caption(
+                        f"Staff review: {review_labels[review_record['status']]} · "
+                        f"{review_record['reviewer']} · {review_record['updated_at']}")
+                    if review_record["status"] == "needs_more_information":
+                        checklist = match_review_checklist(rows)
+                        if checklist:
+                            st.markdown("**Suggested verification checks**")
+                            st.markdown("\n".join(f"- {item}" for item in checklist))
+                else:
+                    st.caption("Staff review: Not yet reviewed.")
+                if can_review_matches(current_user):
+                    with st.expander("Record staff review", expanded=False):
+                        options = {
+                            "Follow up": "follow_up",
+                            "Dismissed": "dismissed",
+                            "Needs more information": "needs_more_information",
+                        }
+                        current_label = review_labels.get(
+                            review_record["status"]) if review_record else None
+                        review_choice = st.selectbox(
+                            "Decision",
+                            options=list(options),
+                            index=list(options).index(current_label) if current_label else None,
+                            placeholder="Select a review decision",
+                            key=f"match_review_choice_{lo['id']}_{fo['id']}")
+                        if st.button("Save review", key=f"save_match_review_{lo['id']}_{fo['id']}",
+                                     disabled=not review_choice, type="primary"):
+                            save_match_review(
+                                lo["id"], fo["id"], options[review_choice],
+                                current_user["email"],
+                                datetime.now().astimezone().isoformat(timespec="seconds"))
+                            st.session_state.flash = ("success", "Staff review saved.")
+                            st.rerun()
                 st.warning("Possible match only. Verify ownership at the campus Lost & Found office.")
                 if notif_line:
                     html(notif_line)

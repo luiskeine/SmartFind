@@ -15,8 +15,9 @@ import smartfind_demo
 from smartfind_auth import create_guest_credentials, guest_code_digest, resolve_role
 from smartfind_core import (CUSTODY_HOLDERS, NOTIFY_THRESHOLD, calculate_match_score,
                             can_update_custody, compare_locations, ensure_custody,
-                            explain_match_evidence, find_pairs, new_notifications, normalize_location,
-                            transfer_custody)
+                            can_review_matches, explain_match_evidence, find_pairs,
+                            match_review_checklist, new_notifications,
+                            normalize_location, transfer_custody)
 
 
 def report(rid, rtype, **kw):
@@ -125,6 +126,18 @@ class ScoreTests(unittest.TestCase):
         self.assertIn("Category (+35)", supporting[0])
         self.assertTrue(any("Color: Color not provided" in item for item in review))
         self.assertTrue(any("Location: Different location" in item for item in review))
+
+    def test_match_review_checklist_uses_only_unmatched_factors(self):
+        _, rows = calculate_match_score(
+            report("L1", "Lost", color="", location="Library"),
+            report("F1", "Found", color="Black", location="Gymnasium"))
+
+        checklist = match_review_checklist(rows)
+
+        self.assertIn("Ask for a more specific color or shade.", checklist)
+        self.assertIn("Confirm the campus area, building, or room.", checklist)
+        self.assertNotIn("Confirm the item type and category.", checklist)
+        self.assertEqual(len(checklist), len(set(checklist)))
 
 
 class DemoScenarioTests(unittest.TestCase):
@@ -591,7 +604,11 @@ class ReportStoreTests(unittest.TestCase):
                                     for statement in ddl))
                 self.assertTrue(any("CREATE TABLE IF NOT EXISTS report_drafts" in statement
                                     for statement in ddl))
+                self.assertTrue(any("CREATE TABLE IF NOT EXISTS match_reviews" in statement
+                                    for statement in ddl))
                 self.assertTrue(any("ENABLE ROW LEVEL SECURITY" in statement for statement in ddl))
+                self.assertTrue(any("ALTER TABLE match_reviews ENABLE ROW LEVEL SECURITY" in statement
+                                    for statement in ddl))
                 with smartfind_store._connect() as connection:
                     connection.execute("SELECT payload::text FROM reports")
                 self.assertEqual(len(connections), 2)
@@ -629,6 +646,65 @@ class ReportStoreTests(unittest.TestCase):
         self.assertEqual(connection.statements[0][1], (guest_id, code_hash))
         self.assertIn("WHERE recovery_code_hash = %s", connection.statements[1][0])
         self.assertEqual(connection.statements[1][1], (code_hash,))
+
+    def test_match_reviews_load_and_upsert_latest_decision_per_report_pair(self):
+        rows = [("L1", "F1", "needs_more_information", "admin@example.com",
+                 "2026-11-05T12:00:00+00:00")]
+
+        class FakeCursor:
+            rowcount = 1
+
+            def fetchall(self):
+                return rows
+
+        class FakeConnection:
+            def __init__(self):
+                self.statements = []
+
+            def execute(self, statement, params=None):
+                self.statements.append((statement, params))
+                return FakeCursor()
+
+        connection = FakeConnection()
+        with patch.object(smartfind_store, "_connect", return_value=nullcontext(connection)):
+            reviews = smartfind_store.load_match_reviews()
+            smartfind_store.save_match_review(
+                "L1", "F1", "follow_up", "Admin@Example.com", "2026-11-05T13:00:00+00:00")
+
+        self.assertEqual(reviews[("L1", "F1")]["status"], "needs_more_information")
+        self.assertEqual(reviews[("L1", "F1")]["reviewer"], "admin@example.com")
+        self.assertIn("ON CONFLICT (lost_report_id, found_report_id) DO UPDATE",
+                      connection.statements[1][0])
+        self.assertEqual(connection.statements[1][1], (
+            "L1", "F1", "follow_up", "admin@example.com", "2026-11-05T13:00:00+00:00"))
+
+    def test_match_review_rejects_invalid_status_and_missing_reviewer(self):
+        with patch.object(smartfind_store, "_connect") as connect:
+            with self.assertRaisesRegex(ValueError, "status is not supported"):
+                smartfind_store.save_match_review("L1", "F1", "approved", "admin@example.com", "now")
+            with self.assertRaisesRegex(ValueError, "reviewer identity is required"):
+                smartfind_store.save_match_review("L1", "F1", "dismissed", " ", "now")
+        connect.assert_not_called()
+
+    def test_deleting_a_report_also_deletes_its_pair_reviews(self):
+        class FakeCursor:
+            rowcount = 1
+
+        class FakeConnection:
+            def __init__(self):
+                self.statements = []
+
+            def execute(self, statement, params=None):
+                self.statements.append((statement, params))
+                return FakeCursor()
+
+        connection = FakeConnection()
+        with patch.object(smartfind_store, "_connect", return_value=nullcontext(connection)):
+            smartfind_store.delete_report("F1")
+
+        self.assertIn("DELETE FROM match_reviews", connection.statements[0][0])
+        self.assertEqual(connection.statements[0][1], ("F1", "F1"))
+        self.assertIn("DELETE FROM reports", connection.statements[1][0])
 
     def test_ui_preferences_and_drafts_are_scoped_to_normalized_owner(self):
         class FakeCursor:
@@ -749,6 +825,11 @@ class AuthenticationTests(unittest.TestCase):
         self.assertEqual(resolve_role("admin@example.com", True, [], ["ADMIN@example.com"]), "admin")
         self.assertIsNone(resolve_role("user@other.edu", True, ["tip.edu.ph"], []))
         self.assertIsNone(resolve_role("user@tip.edu.ph", False, ["tip.edu.ph"], []))
+
+    def test_only_admins_can_review_live_matches(self):
+        self.assertTrue(can_review_matches({"role": "admin"}))
+        self.assertFalse(can_review_matches({"role": "student"}))
+        self.assertFalse(can_review_matches({"role": "guest"}))
 
     def test_guest_recovery_code_is_high_entropy_and_only_a_digest_is_returned(self):
         guest_id, recovery_code, code_hash = create_guest_credentials()
@@ -896,6 +977,18 @@ class DataRefreshTests(unittest.TestCase):
         self.assertIn("Custody history", my_reports)
         self.assertIn("confirm_delete", my_reports)
         self.assertIn("delete_report(rid)", my_reports)
+
+    def test_live_match_reviews_are_admin_gated_and_advisory(self):
+        source = Path("main.py").read_text(encoding="utf-8")
+        matches = source[source.index('elif active == "Possible Matches":'):
+                         source.index('elif active == "Demo Scenarios":')]
+        self.assertIn("match_reviews = load_match_reviews()", matches)
+        self.assertIn("if can_review_matches(current_user):", matches)
+        self.assertIn("save_match_review(", matches)
+        self.assertIn("match_review_checklist(rows)", matches)
+        self.assertIn("review_record['reviewer']", matches)
+        self.assertNotIn("auto_monitor_and_notify()", matches)
+        self.assertNotIn("save_report(", matches)
 
     def test_dropdown_popovers_use_theme_selected_and_hover_colors(self):
         source = smartfind_theme.theme_stylesheet("dark")
